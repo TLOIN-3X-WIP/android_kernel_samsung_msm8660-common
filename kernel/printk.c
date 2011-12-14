@@ -52,6 +52,10 @@
 #define EXTRA_BUF_SIZE 0
 #endif
 
+#ifdef CONFIG_KERNEL_LOG
+#include <linux/klog.h>
+#endif
+
 /*
  * Architectures can override it:
  */
@@ -465,10 +469,11 @@ static inline void boot_delay_msec(void)
 /*
  * Return the number of unread characters in the log buffer.
  */
-static int log_buf_get_len(void)
+int log_buf_get_len(void)
 {
 	return logged_chars;
 }
+EXPORT_SYMBOL(log_buf_get_len);
 
 /*
  * Clears the ring-buffer
@@ -894,6 +899,9 @@ static void call_console_drivers(unsigned start, unsigned end)
 static void emit_log_char(char c)
 {
 	LOG_BUF(log_end) = c;
+#ifdef CONFIG_KERNEL_LOG
+	klog_write_char(c);
+#endif
 	log_end++;
 	if (log_end - log_start > log_buf_len)
 		log_start = log_end - log_buf_len;
@@ -1111,6 +1119,9 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+#if defined(CONFIG_KERNEL_LOG) && 0
+	klog_write(printk_buf, printed_len);
+#endif
 
 	p = printk_buf;
 
