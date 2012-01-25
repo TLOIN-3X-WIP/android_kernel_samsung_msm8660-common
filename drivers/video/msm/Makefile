@@ -147,7 +147,6 @@ obj-$(CONFIG_FB_MSM_MIPI_S6E8AA0_WXGA_Q1_PT) += mipi_s6e8aa0_wxga_q1_pt.o
 endif
 
 obj-$(CONFIG_FB_MSM_LCDC_PANEL) += lcdc_panel.o
-obj-$(CONFIG_FB_MSM_LCDC_LG_XGA) += lcdc_lg_xga.o
 ifndef CONFIG_TARGET_SERIES_DALI # kmj_imsi
 obj-$(CONFIG_FB_MSM_LCDC_LD9040_WVGA) += lcdc_ld9040.o
 endif
@@ -163,6 +162,7 @@ obj-$(CONFIG_FB_MSM_LCDC_EXTERNAL_WXGA) += lcdc_external.o
 obj-$(CONFIG_FB_MSM_HDMI_SII_EXTERNAL_720P) += hdmi_sii9022.o
 obj-$(CONFIG_FB_MSM_LCDC_GORDON_VGA) += lcdc_gordon.o
 obj-$(CONFIG_FB_MSM_LCDC_WXGA) += lcdc_wxga.o
+obj-$(CONFIG_FB_MSM_LCDC_LG_XGA) += lcdc_lg_xga.o
 obj-$(CONFIG_FB_MSM_LCDC_TOSHIBA_WVGA_PT) += lcdc_toshiba_wvga_pt.o
 obj-$(CONFIG_FB_MSM_LCDC_TOSHIBA_FWVGA_PT) += lcdc_toshiba_fwvga_pt.o
 obj-$(CONFIG_FB_MSM_LCDC_SHARP_WVGA_PT) += lcdc_sharp_wvga_pt.o
