@@ -147,6 +147,7 @@ obj-$(CONFIG_FB_MSM_MIPI_S6E8AA0_WXGA_Q1_PT) += mipi_s6e8aa0_wxga_q1_pt.o
 endif
 
 obj-$(CONFIG_FB_MSM_LCDC_PANEL) += lcdc_panel.o
+obj-$(CONFIG_FB_MSM_LCDC_LG_XGA) += lcdc_lg_xga.o
 ifndef CONFIG_TARGET_SERIES_DALI # kmj_imsi
 obj-$(CONFIG_FB_MSM_LCDC_LD9040_WVGA) += lcdc_ld9040.o
 endif
