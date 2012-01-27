@@ -10794,7 +10794,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		pm8058_platform_data.keypad_pdata = &fluid_keypad_data;
 	else if (machine_is_msm8x60_dragon())
 		pm8058_platform_data.keypad_pdata = &dragon_keypad_data;
-	else
+	else if (!machine_is_tenderloin())
 		pm8058_platform_data.keypad_pdata = &ffa_keypad_data;
 #ifndef CONFIG_MSM_CAMERA_V4L2
 	/* Specify reset pin for OV9726 */
