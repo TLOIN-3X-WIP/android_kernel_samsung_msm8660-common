@@ -133,6 +133,10 @@
 #include <linux/hres_counter.h>
 #endif
 
+#ifdef CONFIG_INPUT_LSM303DLH
+#include <linux/i2c/lsm303dlh.h>
+#endif
+
 // Pointer to topaz/tenderloin opal/shortloin wifi/3G pin arrays
 int *pin_table = NULL;
 
@@ -2020,6 +2024,48 @@ static void __init init_a6(void)
 	sbw_ops_impl_1.a6_per_target_interface.delay = a6_delay_impl;
 }
 #endif // CONFIG_A6
+
+#ifdef CONFIG_INPUT_LSM303DLH
+static struct lsm303dlh_acc_platform_data lsm303dlh_acc_pdata = {
+	.poll_interval = 200,
+	.min_interval = 10,
+	.g_range = LSM303DLH_ACC_G_2G,
+	.axis_map_x = 1,
+	.axis_map_y = 0,
+	.axis_map_z = 2,
+	.negate_x = 1,
+	.negate_y = 0,
+	.negate_z = 0,
+	.gpio_int1 = -1,
+	.gpio_int2 = -1,
+};
+
+static struct lsm303dlh_mag_platform_data lsm303dlh_mag_pdata = {
+	.poll_interval = 200,
+	.min_interval = 10,
+	.h_range = LSM303DLH_MAG_H_4_0G,
+	.axis_map_x = 0,
+	.axis_map_y = 1,
+	.axis_map_z = 2,
+	.negate_x = 0,
+	.negate_y = 0,
+	.negate_z = 0,
+};
+
+static struct i2c_board_info __initdata lsm303dlh_acc_i2c_board_info[] = {
+    {
+        I2C_BOARD_INFO ( "lsm303dlh_acc_sysfs", 0x18),
+        .platform_data = &lsm303dlh_acc_pdata,
+    },
+};
+
+static struct i2c_board_info __initdata lsm303dlh_mag_i2c_board_info[] = {
+    {
+        I2C_BOARD_INFO ( "lsm303dlh_mag_sysfs", 0x1e),
+        .platform_data = &lsm303dlh_mag_pdata,
+    },
+};
+#endif // CONFIG_INPUT_LSM303DLH
 
 
 
@@ -9123,6 +9169,20 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(wm8903_codec_i2c_info),
 	},
 #endif
+#ifdef CONFIG_INPUT_LSM303DLH
+    {
+        I2C_TENDERLOIN,
+        MSM_GSBI3_QUP_I2C_BUS_ID,
+        lsm303dlh_acc_i2c_board_info,
+        ARRAY_SIZE(lsm303dlh_acc_i2c_board_info),
+    },
+    {
+        I2C_TENDERLOIN,
+        MSM_GSBI3_QUP_I2C_BUS_ID,
+        lsm303dlh_mag_i2c_board_info,
+        ARRAY_SIZE(lsm303dlh_mag_i2c_board_info),
+    },
+#endif
 };
 #endif /* CONFIG_I2C */
 
@@ -9152,6 +9212,11 @@ static void fixup_i2c_configs(void)
 		pm8901_vreg_init_pdata[PM8901_VREG_ID_MPP0].active_high = 0;
 	else
 		pm8901_vreg_init_pdata[PM8901_VREG_ID_MPP0].active_high = 1;
+#ifdef CONFIG_INPUT_LSM303DLH
+	if (board_is_topaz_3g()) {
+		lsm303dlh_acc_pdata.negate_y = 1;
+	}
+#endif /* CONFIG_INPUT_LSM303DLH */
 #endif
 #endif
 }
