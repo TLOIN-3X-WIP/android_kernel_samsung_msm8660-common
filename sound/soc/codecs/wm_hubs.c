@@ -122,6 +122,10 @@ static void calibrate_dc_servo(struct snd_soc_codec *codec)
 				  WM8993_DCS_TRIG_STARTUP_1);
 	}
 
+	// make compiler happy about possible unitiialized vars
+	reg_l = 0;
+	reg_r = 0;
+
 	/* Different chips in the family support different readback
 	 * methods.
 	 */
