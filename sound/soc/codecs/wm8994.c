@@ -2231,8 +2231,9 @@ int wm8994_hw_params(struct snd_pcm_substream *substream,
 		aif1 |= 0x60;
 		break;
 	default:
-		printk(KERN_WARNING "%s: PCM format invalid\n", __func__);
-		return -EINVAL;
+		dev_err(codec->dev, "pcm format was not valid, assuming S16_LE\n");
+		bclk_rate *= 16;
+		break;
 	}
 
 	/* Try to find an appropriate sample rate; look for an exact match. */

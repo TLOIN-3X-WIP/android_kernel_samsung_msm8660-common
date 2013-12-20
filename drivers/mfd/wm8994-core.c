@@ -648,6 +648,7 @@ static int wm8994_i2c_read_device(struct wm8994 *wm8994, unsigned short reg,
 	return 0;
 }
 
+#if 0
 static int wm8994_i2c_write_device(struct wm8994 *wm8994, unsigned short reg,
 				   int bytes, const void *src)
 {
@@ -675,6 +676,27 @@ static int wm8994_i2c_write_device(struct wm8994 *wm8994, unsigned short reg,
 
 	return 0;
 }
+#else
+static int wm8994_i2c_write_device(struct wm8994 *wm8994, unsigned short reg,
+				   int bytes, const void *src)
+{
+	struct i2c_client *i2c = wm8994->control_data;
+	unsigned char msg[bytes + 2];
+	int ret;
+
+	reg = cpu_to_be16(reg);
+	memcpy(&msg[0], &reg, 2);
+	memcpy(&msg[2], src, bytes);
+
+	ret = i2c_master_send(i2c, msg, bytes + 2);
+	if (ret < 0)
+		return ret;
+	if (ret < bytes + 2)
+		return -EIO;
+
+	return 0;
+}
+#endif
 
 static int wm8994_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
