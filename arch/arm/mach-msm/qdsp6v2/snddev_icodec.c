@@ -303,6 +303,8 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 	union afe_port_config afe_config;
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
 
+	memset(&afe_config, 0, sizeof(afe_config));
+
 	wake_lock(&drv->rx_idlelock);
 
 	if (drv->snddev_vreg) {

@@ -290,6 +290,8 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology)
 	int ret = 0;
 	int index;
 
+	memset(&open, 0, sizeof(open));
+
 	pr_debug("%s: port %d path:%d rate:%d mode:%d\n", __func__,
 				port_id, path, rate, channel_mode);
 
@@ -543,6 +545,8 @@ int adm_matrix_map(int session_id, int path, int num_copps,
 	int ret = 0, i = 0;
 	/* Assumes port_ids have already been validated during adm_open */
 	int index = afe_get_port_index(copp_id);
+
+	memset(&route, 0, sizeof(route));
 
 	pr_debug("%s: session 0x%x path:%d num_copps:%d port_id[0]:%d\n",
 		 __func__, session_id, path, num_copps, port_id[0]);
