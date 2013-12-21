@@ -155,8 +155,7 @@ static int __init lcdc_lg_panel_init(void)
 	pinfo->wait_cycle = 0;
 	pinfo->bpp = 18;
 	pinfo->fb_num = 2;
-	// pinfo->clk_rate = 96000000;
-	pinfo->clk_rate = 76800000;
+	pinfo->clk_rate = 96000000;
 	pinfo->bl_max = 15;
 	pinfo->bl_min = 1;
 
