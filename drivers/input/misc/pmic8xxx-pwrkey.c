@@ -212,6 +212,7 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 
 		goto free_press_irq;
 	}
+#ifndef CONFIG_MACH_TENDERLOIN
 	sec_powerkey = device_create(sec_class, NULL, 0, NULL,
 	"sec_powerkey");
 	 if (IS_ERR(sec_powerkey))
@@ -222,6 +223,7 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 		dev_attr_sec_powerkey_pressed.attr.name);
 	}
 	dev_set_drvdata(sec_powerkey, pwrkey);
+#endif
 	device_init_wakeup(&pdev->dev, pdata->wakeup);
 
 	return 0;
