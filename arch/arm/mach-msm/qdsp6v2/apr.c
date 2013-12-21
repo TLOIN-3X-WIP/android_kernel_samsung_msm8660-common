@@ -66,8 +66,6 @@ int apr_send_pkt(void *handle, uint32_t *buf)
 	uint16_t client_id;
 	uint16_t w_len;
 	unsigned long flags;
-	int doff, dlen, dstart, di;
-	char dbgs[256];
 
 	if (!handle || !buf) {
 		pr_err("APR: Wrong parameters\n");
@@ -131,34 +129,6 @@ int apr_send_pkt(void *handle, uint32_t *buf)
 	}
 /* END: VPCM */
 #endif 
-
-	printk(KERN_DEBUG
-			"%s: oc=%x sz=%d hf=%x tok=%x\n",
-			__func__, hdr->opcode, hdr->pkt_size, hdr->hdr_field, hdr->token);
-	printk(KERN_DEBUG
-			"%s: src_svc=%x src_dom=%x src_port=%x\n",
-			__func__, hdr->src_svc, hdr->src_domain, hdr->src_port);
-	printk(KERN_DEBUG
-			"%s: dest_svc=%x dest_dom=%x dest_port=%x\n",
-			__func__, hdr->dest_svc, hdr->dest_domain, hdr->dest_port);
-
-	dlen = hdr->pkt_size - sizeof(struct apr_hdr);
-	dstart = sizeof(struct apr_hdr);
-	doff = 0;
-	for (di = dstart; di < (dstart + dlen); di++) {
-		sprintf(&dbgs[doff], "%02x", ((char *)hdr)[di]);
-		doff += 2;
-		if (doff > 40) {
-			dbgs[doff] = '\0';
-			printk(KERN_DEBUG "%s: X=%s\n", __func__, dbgs);
-			doff = 0;
-		}
-	}
-	if (doff > 0) {
-		dbgs[doff] = '\0';
-		printk(KERN_DEBUG "%s: X=%s\n", __func__, dbgs);
-	}
-
 
 	w_len = apr_tal_write(clnt->handle, buf, hdr->pkt_size);
 	if (w_len != hdr->pkt_size)
