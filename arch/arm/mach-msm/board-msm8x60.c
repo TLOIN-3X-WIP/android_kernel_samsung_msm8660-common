@@ -4126,6 +4126,7 @@ static void __init msm8x60_init_dsps(void)
 #endif /* CONFIG_MSM_DSPS */
 
 #ifdef CONFIG_FB_MSM_LCDC_LG_XGA
+#ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_PRIM_BUF_SIZE \
 		(roundup((1024 * 768 * 4), 4096) * 3) /* 4 bpp x 3 pages */
 #else
@@ -4159,20 +4160,6 @@ static void __init msm8x60_init_dsps(void)
 #define MSM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
 #define MSM_HDMI_PRIM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
 
-#ifdef CONFIG_FB_MSM_OVERLAY_WRITEBACK
-/* width x height x 3 bpp x 2 frame buffer */
-#ifdef CONFIG_FB_MSM_LCDC_LG_XGA
-#define MSM_FB_WRITEBACK_SIZE (1024 * 768 * 3 * 2)
-#else
-#define MSM_FB_WRITEBACK_SIZE (1024 * 600 * 3 * 2)
-#endif
-#define MSM_FB_WRITEBACK_OFFSET  \
-		(MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE)
-#else
-#define MSM_FB_WRITEBACK_SIZE	0
-#define MSM_FB_WRITEBACK_OFFSET 0
-#endif
-
 #ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
 unsigned char hdmi_is_primary = 1;
 #else
@@ -4180,7 +4167,11 @@ unsigned char hdmi_is_primary;
 #endif
 
 #ifdef CONFIG_FB_MSM_OVERLAY0_WRITEBACK
+#ifdef CONFIG_FB_MSM_LCDC_LG_XGA
+#define MSM_FB_OVERLAY0_WRITEBACK_SIZE roundup((1024 * 768 * 3 * 2), 4096)
+#else
 #define MSM_FB_OVERLAY0_WRITEBACK_SIZE roundup((1376 * 768 * 3 * 2), 4096)
+#endif
 #else
 #define MSM_FB_OVERLAY0_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY0_WRITEBACK */
