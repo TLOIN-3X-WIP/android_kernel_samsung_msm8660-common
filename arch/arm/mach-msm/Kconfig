@@ -1626,7 +1626,7 @@ endchoice
 
 choice
 	prompt "TARGET SERIES"
-	default TARGET_SERIES_CELOX
+	default TARGET_SERIES_NONE
 
 	config TARGET_SERIES_CELOX
 		bool "SERIES_CELOX"
@@ -1657,6 +1657,11 @@ choice
 		bool "SERIES_P8LTE"
 		help
 		  Support models of p8lte series		  
+
+	config TARGET_SERIES_NONE
+		bool "SERIES_NONE"
+		help
+		  Support no special SERIES models
 endchoice
 
 choice
