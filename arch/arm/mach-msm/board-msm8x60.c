@@ -87,7 +87,7 @@
 #include <mach/restart.h>
 #include <mach/board-msm8660.h>
 #include <mach/iommu_domains.h>
-#include <linux/gpio-keys.h>
+#include <linux/gpio_keys.h>
 
 #ifdef CONFIG_HSUART
 #include <linux/hsuart.h>
