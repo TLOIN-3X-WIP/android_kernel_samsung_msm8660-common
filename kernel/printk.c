@@ -258,7 +258,7 @@ void __init setup_log_buf(int early)
 // ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ_ONLYJAZZ
 //=======================================================================================================
 
-#if 1 //def CONFIG_SEC_LOG
+#ifdef CONFIG_SEC_LOG //def CONFIG_SEC_LOG
 #define CONFIG_PRINTK_NOCACHE
 /*
  * Example usage: sec_log=256K@0x45000000
