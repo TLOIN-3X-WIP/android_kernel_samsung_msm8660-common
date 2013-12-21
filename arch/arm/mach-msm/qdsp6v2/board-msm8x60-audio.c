@@ -876,7 +876,9 @@ void msm_snddev_audience_poweramp_off_headset(void)
 || defined(CONFIG_USA_MODEL_SGH_I717) || defined(CONFIG_USA_MODEL_SGH_I757)
 int msm_snddev_poweramp_on_headset_call(void)
 {
+#ifndef CONFIG_MACH_TENDERLOIN
 	fsa9480_audiopath_control(0);
+#endif
 #ifdef CONFIG_SENSORS_YDA165
 	yda165_headset_call_onoff(1);
 #endif
@@ -1132,6 +1134,7 @@ static int msm_snddev_voltage_on(void)
 	 * Always at (CONFIG_KOR_MODEL_SHV_E160S, CONFIG_KOR_MODEL_SHV_E160K,
 	 * CONFIG_USA_MODEL_SGH_I727, CONFIG_USA_MODEL_SGH_I717)
 	 */
+#ifndef CONFIG_MACH_TENDERLOIN
 #if defined(CONFIG_USA_MODEL_SGH_T989)
 	if (get_hw_rev() >= 0x9) /* Rev0.3, Rev0.3A */
 #elif defined(CONFIG_KOR_MODEL_SHV_E110S)
@@ -1192,6 +1195,7 @@ static int msm_snddev_voltage_on(void)
 			goto regulator_fail;
 		}
 	}
+#endif // !CONFIG_MACH_TENDERLOIN
 
 	return rc;
 
