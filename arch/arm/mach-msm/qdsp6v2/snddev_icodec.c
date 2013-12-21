@@ -1079,8 +1079,6 @@ static int snddev_icodec_probe(struct platform_device *pdev)
 #ifndef CONFIG_MACH_TENDERLOIN
 		dev_info->dev_ops.enable_anc =
 		snddev_icodec_enable_anc;
-#else
-		dev_info->dev_ops.enable_anc = NULL;
 #endif
 	} else {
 		dev_info->dev_ops.enable_anc = NULL;
