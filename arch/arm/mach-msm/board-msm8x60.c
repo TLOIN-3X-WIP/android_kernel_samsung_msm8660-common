@@ -8764,6 +8764,244 @@ static void __init msm8x60_init_tlmm(void)
 	}
 }
 
+/*WLAN*/
+
+#define WLAN_1V8_SDIO_ACT_LOAD  80000
+#define WLAN_1V8_SDIO_MIN_LOAD  10000
+
+static int tenderloin_wifi_power(int on)
+{
+	static struct regulator * wifi_S3A_1V8  = NULL;
+	static struct regulator * wifi_L1B_3V3  = NULL;
+	static struct regulator * wifi_L3B_3V3  = NULL;
+	static struct regulator * wifi_L19A_1V8 = NULL;
+	static int wifi_is_on = 0;
+	static int rc = -EINVAL; /* remember if the gpio_requests succeeded */
+	int gpios[] = {
+			TENDERLOIN_GPIO_WL_HOST_WAKE,
+			pin_table[TENDERLOIN_GPIO_HOST_WAKE_WL_PIN],
+			pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN]
+		};
+
+	// "8901_l3"  - 3.3V - VREG_L3B_3V3      - WLAN_PA_3V3
+	// "8901_l1"  - 3.3V - VREG_L1B_3V3      - VDD_WLAN_3V3
+	// "8058_l19" - 1.8V - VREG_L19A_1V8     - VDD_1.8
+	// "8058_s3"  - 1.8V - VREG_S3A_1V8_WLAN - DVDD_SDIO_1V8 etc.
+
+	if (!wifi_S3A_1V8) {
+		// Always on
+		wifi_S3A_1V8 = regulator_get(NULL, "8058_s3");
+		if (IS_ERR(wifi_S3A_1V8)) {
+			pr_err("%s: unable to get %s\n",
+				__func__, "8058_s3");
+		}
+		if(regulator_set_voltage(wifi_S3A_1V8, 1800000, 1800000)){
+			pr_err("%s: unable to set voltage for %s\n",
+				__func__, "8058_s3");
+		}
+		if (regulator_enable(wifi_S3A_1V8)){
+			pr_err("%s: Unable to enable %s\n",
+				 __func__, "8058_s3");
+		}
+	}
+
+	if (!wifi_L3B_3V3) {
+		wifi_L3B_3V3 = regulator_get(NULL, "8901_l3");
+		if (IS_ERR(wifi_L3B_3V3)) {
+			pr_err("%s: unable to get %s\n",
+				__func__, "8901_l3");
+		}
+		if (regulator_set_voltage(wifi_L3B_3V3, 3300000, 3300000)) {
+			pr_err("%s: unable to set voltage for %s\n",
+				__func__, "8901_l3");
+		}
+	}
+
+	if (!wifi_L1B_3V3) {
+		wifi_L1B_3V3 = regulator_get(NULL, "8901_l1");
+		if (IS_ERR(wifi_L1B_3V3)) {
+			pr_err("%s: unable to get %s\n",
+				__func__, "8901_l1");
+		}
+		if (regulator_set_voltage(wifi_L1B_3V3, 3300000, 3300000)) {
+			pr_err("%s: unable to set voltage for %s\n",
+				__func__, "8901_l3");
+		}
+	}
+
+	if (!wifi_L19A_1V8) {
+		wifi_L19A_1V8 = regulator_get(NULL, "8058_l19");
+		if (IS_ERR(wifi_L19A_1V8)) {
+			pr_err("%s: unable to get %s\n",
+				__func__, "8058_l19");
+		}
+		if (regulator_set_voltage(wifi_L19A_1V8, 1800000, 1800000)) {
+			pr_err("%s: unable to set voltage for %s\n",
+				__func__, "8058_l19");
+		}
+	}
+
+	BUG_ON(!wifi_L3B_3V3);
+	BUG_ON(!wifi_L1B_3V3);
+	BUG_ON(!wifi_L19A_1V8);
+	BUG_ON(!wifi_S3A_1V8);
+
+	if (on) {
+		//
+		// B. enable power
+		// 3.3V -> 1.8V -> wait (Tb 5) -> CHIP_PWD
+
+		pr_info("wifi_power(%d) 1.8V sdio: set load\n", on);
+		rc = regulator_set_optimum_mode(wifi_S3A_1V8,
+			WLAN_1V8_SDIO_ACT_LOAD);
+		if (rc < 0) {
+			pr_err("%s: Unable (%d) to set opt load for %s\n",
+				 __func__, rc, "8058_s3");
+		} else {
+			pr_info("%s: New regulator mode for %s: %d\n",
+				 __func__, "8058_s3", rc );
+		}
+
+		pr_info("wifi_power(%d) 3.3V\n", on);
+		rc = regulator_enable(wifi_L3B_3V3);
+		if (rc) {
+			pr_err("%s: Unable (%d) to enable %s\n",
+				 __func__, rc, "8901_l3");
+		}
+
+		pr_info("wifi_power(%d) 8901_l1 3.3V\n", on);
+		rc = regulator_enable(wifi_L1B_3V3);
+		if (rc) {
+			pr_err("%s: Unable (%d) to enable %s\n",
+				 __func__, rc, "8901_l1");
+		}
+
+		pr_info("wifi_power(%d) 8058_l19 1.8V\n", on);
+		rc = regulator_enable(wifi_L19A_1V8);
+		if (rc) {
+			pr_err("%s: Unable (%d) to enable %s\n",
+				 __func__, rc, "8058_l19");
+		}
+
+		printk("wifi_power(%d) CHIP_PWD\n", on);
+		mdelay(5);
+
+		/* request gpio if not yet done */
+		printk(KERN_ERR "wifi_is_on(%d)\n", wifi_is_on);
+		if (!wifi_is_on) {
+			rc = configure_gpiomux_gpios(on, gpios, ARRAY_SIZE(gpios));
+			if (rc) {
+				pr_err("%s: gpio request failed\n", __func__);
+				return -EINVAL;
+			}
+		}
+
+		// gpio_direction_output(pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN], 0);
+		gpio_set_value(pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN], 0);
+		mdelay(5);
+		// gpio_direction_output(pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN], 1);
+		gpio_set_value(pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN], 1);
+	}
+	else
+	{
+		//CHIP_PWD -> wait (Tc 5)
+		printk(KERN_ERR "%s: MARK 3\n", __func__);
+		// gpio_direction_output(pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN], 0);
+		gpio_set_value(pin_table[TENDERLOIN_GPIO_WLAN_RST_N_PIN], 0);
+		mdelay(5);
+
+		if (wifi_is_on) {
+			rc = configure_gpiomux_gpios(on, gpios, ARRAY_SIZE(gpios));
+		}
+
+		rc = regulator_disable(wifi_L3B_3V3);
+		if (rc) {
+			pr_err("%s: Unable (%d) to disable %s\n",
+				__func__, rc, "8901_l3");
+		}
+
+		rc = regulator_disable(wifi_L1B_3V3);
+		if (rc) {
+			pr_err("%s: Unable (%d) to disable %s\n",
+				__func__, rc, "8901_l1");
+		}
+
+		rc = regulator_disable(wifi_L19A_1V8);
+		if (rc) {
+			pr_err("%s: Unable (%d) to disable %s\n",
+				__func__, rc, "8058_l19");
+		}
+
+		rc = regulator_set_optimum_mode(wifi_S3A_1V8,
+			WLAN_1V8_SDIO_MIN_LOAD);
+		if (rc < 0) {
+			pr_err("%s: Unable (%d) to set opt load for %s\n",
+				 __func__, rc, "8058_s3");
+		} else {
+			pr_info("%s: New regulator mode for %s: %d\n",
+				 __func__, "8058_s3", rc );
+		}
+	}
+
+	wifi_is_on = on;
+	return 0;
+}
+
+static struct mmc_host *wifi_mmc;
+int board_sdio_wifi_enable(unsigned int param);
+int board_sdio_wifi_disable(unsigned int param);
+
+static void tenderloin_probe_wifi(int id, struct mmc_host *mmc)
+{
+	printk("%s: id %d mmc %p\n", __PRETTY_FUNCTION__, id, mmc);
+	wifi_mmc = mmc;
+
+	board_sdio_wifi_enable(0);
+}
+
+static void tenderloin_remove_wifi(int id, struct mmc_host *mmc)
+{
+	printk("%s: id %d mmc %p\n", __PRETTY_FUNCTION__, id, mmc);
+	wifi_mmc = NULL;
+
+	board_sdio_wifi_disable(0);
+}
+
+/*
+ *  An API to enable wifi
+ */
+int board_sdio_wifi_enable(unsigned int param)
+{
+	printk(KERN_ERR "board_sdio_wifi_enable\n");
+
+	tenderloin_wifi_power(1);
+	if (wifi_mmc) {
+		mmc_detect_change(wifi_mmc, msecs_to_jiffies(250));
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(board_sdio_wifi_enable);
+
+/*
+ *  An API to disable wifi
+ */
+int board_sdio_wifi_disable(unsigned int param)
+{
+	printk(KERN_ERR "board_sdio_wifi_disable\n");
+
+	tenderloin_wifi_power(0);
+
+	if (wifi_mmc) {
+		mmc_detect_change(wifi_mmc, msecs_to_jiffies(100));
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(board_sdio_wifi_disable);
+
+
+
 #if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
