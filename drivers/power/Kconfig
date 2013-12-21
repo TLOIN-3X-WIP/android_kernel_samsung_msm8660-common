@@ -211,13 +211,10 @@ config CHARGER_ISP1704
 	  ISP1707/ISP1704 USB transceivers.
 
 config CHARGER_MAX8903
-	tristate "MAX8903 Battery DC-DC Charger for USB and Adapter Power"
-	depends on GENERIC_HARDIRQS
+	tristate "MAXIM 8903 Charger (HP/Palm)"
+	default n
 	help
-	  Say Y to enable support for the MAX8903 DC-DC charger and sysfs.
-	  The driver supports controlling charger-enable and current-limit
-	  pins based on the status of charger connections with interrupt
-	  handlers.
+	  Say Y to enable support for the Maxim MAX8903 DC-DC charger.
 
 config CHARGER_TWL4030
 	tristate "OMAP TWL4030 BCI charger driver"
@@ -369,5 +366,7 @@ config PM8921_BMS
 	depends on MFD_PM8921_CORE
 	help
 	  Say Y here to enable support for pm8921 chip bms subdevice
+
+
 
 endif # POWER_SUPPLY
