@@ -72,6 +72,7 @@ obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_MSM_LEGACY)		+= msm_touch.o
 obj-$(CONFIG_TOUCHSCREEN_CY8C_TS)	+= cy8c_ts.o
 obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)       += cyttsp-i2c.o
+obj-$(CONFIG_TOUCHSCREEN_CY8CTMA395)       += cy8ctma395.o
 ifdef CONFIG_SAMSUNG_8X60_TABLET
 obj-$(CONFIG_TOUCHSCREEN_MELFAS) += melfas_ts_tablet.o mcs8000_download_tablet.o mms100_ICS_download_tablet.o
 else
