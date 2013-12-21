@@ -339,6 +339,10 @@ static inline unsigned int cpufreq_quick_get(unsigned int cpu)
 }
 #endif
 
+#define MAX_FREQ_LIMIT		1512000
+#define MIN_FREQ_LIMIT		384000
+
+#define MAX_TOUCH_LIMIT		486000
 
 #ifdef CONFIG_SEC_DVFS
 enum {
@@ -346,10 +350,6 @@ enum {
 	NON_BOOT_CPU = 1
 };
 
-#define MAX_FREQ_LIMIT		1512000
-#define MIN_FREQ_LIMIT		384000
-
-#define MAX_TOUCH_LIMIT		486000
 #ifdef CONFIG_TARGET_SERIES_DALI
 #define MAX_UNICPU_LIMIT	1188000	
 #else
