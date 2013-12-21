@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  *
  */
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
@@ -293,6 +294,9 @@ static int snddev_ecodec_probe(struct platform_device *pdev)
 	struct msm_snddev_info *dev_info;
 	struct snddev_ecodec_state *ecodec;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+	// dump_stack();
+
 	if (!pdev || !pdev->dev.platform_data) {
 		printk(KERN_ALERT "Invalid caller\n");
 		rc = -1;
@@ -341,6 +345,8 @@ int __init snddev_ecodec_init(void)
 	int rc = 0;
 	struct snddev_ecodec_drv_state *drv = &snddev_ecodec_drv;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+	// dump_stack();
 	mutex_init(&drv->dev_lock);
 	drv->ref_cnt = 0;
 

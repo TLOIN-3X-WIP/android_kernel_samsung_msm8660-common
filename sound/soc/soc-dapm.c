@@ -30,7 +30,7 @@
  */
 
 #undef DEBUG
-
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -1242,11 +1242,14 @@ static void dapm_seq_run_coalesced(struct snd_soc_dapm_context *dapm,
 	unsigned int mask = 0;
 	unsigned int cur_mask;
 
+	// printk(KERN_DEBUG "%s: MARK 1\n", __func__);
+
 	_w = list_first_entry(pending, struct snd_soc_dapm_widget,
 				power_list);
 	reg = _w->reg;
 
 	list_for_each_entry(w, pending, power_list) {
+		printk(KERN_DEBUG "%s: seq=%s\n", __func__, w->name ? w->name : "");
 		cur_mask = 1 << w->shift;
 		BUG_ON(reg != w->reg);
 
@@ -1268,6 +1271,7 @@ static void dapm_seq_run_coalesced(struct snd_soc_dapm_context *dapm,
 		dapm_seq_check_event(dapm, w, SND_SOC_DAPM_PRE_PMD);
 	}
 
+	// printk(KERN_DEBUG "%s: MARK 2\n", __func__);
 	if (reg >= 0) {
 		/* Any widget will do, they should all be updating the
 		 * same register.
@@ -1282,8 +1286,11 @@ static void dapm_seq_run_coalesced(struct snd_soc_dapm_context *dapm,
 		soc_widget_update_bits(_w, reg, mask, value);
 	}
 
+	// printk(KERN_DEBUG "%s: MARK 3\n", __func__);
 	list_for_each_entry(w, pending, power_list) {
+		// printk(KERN_DEBUG "%s: seq=%s MARKB\n", __func__, w->name ? w->name : "");
 		dapm_seq_check_event(dapm, w, SND_SOC_DAPM_POST_PMU);
+		// printk(KERN_DEBUG "%s: seq=%s MARKC\n", __func__, w->name ? w->name : "");
 		dapm_seq_check_event(dapm, w, SND_SOC_DAPM_POST_PMD);
 	}
 }
@@ -1316,18 +1323,23 @@ static void dapm_seq_run(struct snd_soc_dapm_context *dapm,
 	list_for_each_entry_safe(w, n, list, power_list) {
 		ret = 0;
 
+		printk(KERN_DEBUG "%s: seq=%s\n", __func__, w->name ? w->name : "");
 		/* Do we need to apply any queued changes? */
 		if (sort[w->id] != cur_sort || w->reg != cur_reg ||
 		    w->dapm != cur_dapm || w->subseq != cur_subseq) {
-			if (cur_dapm && !list_empty(&pending))
+			if (cur_dapm && !list_empty(&pending)) {
+				// printk(KERN_DEBUG "%s: seq=%s MARKA\n", __func__, w->name ? w->name : "");
 				dapm_seq_run_coalesced(cur_dapm, &pending);
+			}
 
 			if (cur_dapm && cur_dapm->seq_notifier) {
 				for (i = 0; i < ARRAY_SIZE(dapm_up_seq); i++)
-					if (sort[i] == cur_sort)
+					if (sort[i] == cur_sort) {
+						// printk(KERN_DEBUG "%s: seq=%s MARKB i=%d\n", __func__, w->name ? w->name : "", i);
 						cur_dapm->seq_notifier(cur_dapm,
 								       i,
 								       cur_subseq);
+					}
 			}
 
 			INIT_LIST_HEAD(&pending);
@@ -1337,6 +1349,7 @@ static void dapm_seq_run(struct snd_soc_dapm_context *dapm,
 			cur_dapm = NULL;
 		}
 
+		// printk(KERN_DEBUG "%s: seq=%s MARK1\n", __func__, w->name ? w->name : "");
 		switch (w->id) {
 		case snd_soc_dapm_pre:
 			if (!w->event)
@@ -1351,6 +1364,7 @@ static void dapm_seq_run(struct snd_soc_dapm_context *dapm,
 					       NULL, SND_SOC_DAPM_PRE_PMD);
 #ifdef CONFIG_MACH_TENDERLOIN
 			else {
+				// printk(KERN_DEBUG "%s: tloin_event\n", __func__);
 				ret = w->event(w, NULL, 0);
 			}
 #endif
@@ -1369,6 +1383,7 @@ static void dapm_seq_run(struct snd_soc_dapm_context *dapm,
 					       NULL, SND_SOC_DAPM_POST_PMD);
 #ifdef CONFIG_MACH_TENDERLOIN
 			else {
+				// printk(KERN_DEBUG "%s: tloin_event2\n", __func__);
 				ret = w->event(w, NULL, 0);
 			}
 #endif
@@ -1389,15 +1404,18 @@ static void dapm_seq_run(struct snd_soc_dapm_context *dapm,
 				"Failed to apply widget power: %d\n", ret);
 	}
 
+	// printk(KERN_DEBUG "%s: seq=%s MARK2\n", __func__, w->name ? w->name : "");
 	if (cur_dapm && !list_empty(&pending))
 		dapm_seq_run_coalesced(cur_dapm, &pending);
 
+	// printk(KERN_DEBUG "%s: seq=%s MARK3\n", __func__, w->name ? w->name : "");
 	if (cur_dapm && cur_dapm->seq_notifier) {
 		for (i = 0; i < ARRAY_SIZE(dapm_up_seq); i++)
 			if (sort[i] == cur_sort)
 				cur_dapm->seq_notifier(cur_dapm,
 						       i, cur_subseq);
 	}
+	// printk(KERN_DEBUG "%s: seq=%s MARK4\n", __func__, w->name ? w->name : "");
 }
 
 static void dapm_widget_update(struct snd_soc_dapm_context *dapm)
@@ -1509,12 +1527,15 @@ static int dapm_power_widgets(struct snd_soc_dapm_context *dapm, int event)
 	LIST_HEAD(async_domain);
 	int power;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+
 	trace_snd_soc_dapm_start(card);
 
 	list_for_each_entry(d, &card->dapm_list, list)
 		if (d->n_widgets || d->codec == NULL)
 			d->dev_power = 0;
 
+	printk(KERN_DEBUG "%s: MARK 1\n", __func__);
 	/* Check which widgets we need to power and store them in
 	 * lists indicating if they should be powered up or down.
 	 */
@@ -1553,6 +1574,7 @@ static int dapm_power_widgets(struct snd_soc_dapm_context *dapm, int event)
 		}
 	}
 
+	printk(KERN_DEBUG "%s: MARK 2\n", __func__);
 	/* If there are no DAPM widgets then try to figure out power from the
 	 * event type.
 	 */
@@ -1587,6 +1609,7 @@ static int dapm_power_widgets(struct snd_soc_dapm_context *dapm, int event)
 		}
 	}
 
+	printk(KERN_DEBUG "%s: MARK 3\n", __func__);
 	/* Force all contexts in the card to the same bias state */
 	power = 0;
 	list_for_each_entry(d, &card->dapm_list, list)
@@ -1596,32 +1619,40 @@ static int dapm_power_widgets(struct snd_soc_dapm_context *dapm, int event)
 		d->dev_power = power;
 
 
+	printk(KERN_DEBUG "%s: MARK 4\n", __func__);
 	/* Run all the bias changes in parallel */
 	list_for_each_entry(d, &dapm->card->dapm_list, list)
 		async_schedule_domain(dapm_pre_sequence_async, d,
 					&async_domain);
 	async_synchronize_full_domain(&async_domain);
 
+	printk(KERN_DEBUG "%s: MARK 5\n", __func__);
 	/* Power down widgets first; try to avoid amplifying pops. */
 	dapm_seq_run(dapm, &down_list, event, false);
 
+	printk(KERN_DEBUG "%s: MARK 6\n", __func__);
 	dapm_widget_update(dapm);
 
+	printk(KERN_DEBUG "%s: MARK 7\n", __func__);
 	/* Now power up. */
 	dapm_seq_run(dapm, &up_list, event, true);
 
+	printk(KERN_DEBUG "%s: MARK 8\n", __func__);
 	/* Run all the bias changes in parallel */
 	list_for_each_entry(d, &dapm->card->dapm_list, list)
 		async_schedule_domain(dapm_post_sequence_async, d,
 					&async_domain);
 	async_synchronize_full_domain(&async_domain);
 
+	printk(KERN_DEBUG "%s: MARK 9\n", __func__);
 	pop_dbg(dapm->dev, card->pop_time,
 		"DAPM sequencing finished, waiting %dms\n", card->pop_time);
 	pop_wait(card->pop_time);
 
+	printk(KERN_DEBUG "%s: MARK 10\n", __func__);
 	trace_snd_soc_dapm_done(card);
 
+	printk(KERN_DEBUG "%s: MARK 11\n", __func__);
 	return 0;
 }
 

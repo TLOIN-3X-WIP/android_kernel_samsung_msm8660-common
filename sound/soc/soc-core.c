@@ -21,7 +21,7 @@
  *   o Add more codecs and platforms to ensure good API coverage.
  *   o Support TDM on PCM and I2S
  */
-
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -557,6 +557,8 @@ int soc_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_soc_dai_driver *codec_dai_drv = codec_dai->driver;
 	int ret = 0;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
 	if (rtd->dai_link->no_host_mode == SND_SOC_DAI_LINK_NO_HOST)
@@ -836,6 +838,8 @@ int soc_pcm_prepare(struct snd_pcm_substream *substream)
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret = 0;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
 	if (rtd->dai_link->ops && rtd->dai_link->ops->prepare) {
@@ -920,6 +924,8 @@ int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret = 0;
+
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
@@ -1041,6 +1047,8 @@ int soc_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+
 	if (codec_dai->driver->ops->trigger) {
 		ret = codec_dai->driver->ops->trigger(substream, cmd, codec_dai);
 		if (ret < 0)
@@ -1068,6 +1076,8 @@ int soc_pcm_bespoke_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret;
+
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 
 	if (codec_dai->driver->ops->bespoke_trigger) {
 		ret = codec_dai->driver->ops->bespoke_trigger(substream, cmd, codec_dai);
@@ -1689,6 +1699,9 @@ static int soc_probe_codec(struct snd_soc_card *card,
 {
 	int ret = 0;
 	const struct snd_soc_codec_driver *driver = codec->driver;
+
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+	// dump_stack();
 
 	codec->card = card;
 	codec->dapm.card = card;

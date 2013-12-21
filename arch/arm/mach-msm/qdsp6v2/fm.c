@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, you can find it at http://www.fsf.org
  */
-
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>

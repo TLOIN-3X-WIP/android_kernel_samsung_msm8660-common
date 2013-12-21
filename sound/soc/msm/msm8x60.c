@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#define DEBUG 1
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/module.h>
@@ -423,6 +423,7 @@ static int configure_wm_hw(struct msm_snddev_info *dev_info, struct snd_soc_code
 			fll_sysclk = WM8994_SYSCLK_FLL1;
 			aifclk = WM8994_AIF1_CLOCKING_1;
 		} else {
+			printk(KERN_DEBUG "%s: MARK 3\n", __func__);
 			rt = snd_soc_get_pcm_runtime(codec->card, "Record");
 			substream.stream = SNDRV_PCM_STREAM_CAPTURE;
 			fll = WM8994_FLL2;
@@ -1431,6 +1432,9 @@ static int msm_new_mixer(struct snd_soc_codec *codec)
 	int err;
 	int dev_cnt;
 
+	printk(KERN_DEBUG "%s: CALLED codec=%s\n", __func__,
+			codec->name ? codec->name : "null");
+
 	strcpy(codec->card->snd_card->mixername, "MSM Mixer");
 	for (idx = 0; idx < ARRAY_SIZE(snd_msm_controls); idx++) {
 		err = snd_ctl_add(codec->card->snd_card,
@@ -1451,6 +1455,8 @@ static int msm_new_mixer(struct snd_soc_codec *codec)
 
 	for (idx = 0; idx < dev_cnt; idx++) {
 		if (!snd_dev_ctl_index(idx)) {
+			printk(KERN_DEBUG "%s: Adding dev %s\n", __func__,
+					snd_dev_controls[idx].name);
 			err = snd_ctl_add(codec->card->snd_card,
 				snd_ctl_new1(&snd_dev_controls[idx], codec));
 			if (err < 0)
@@ -1594,6 +1600,8 @@ static int msm_soc_dai_init(
 	struct wm8994_priv *wm8994;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_pcm_runtime *rt;
+
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 
 	init_waitqueue_head(&the_locks.enable_wait);
 	init_waitqueue_head(&the_locks.eos_wait);

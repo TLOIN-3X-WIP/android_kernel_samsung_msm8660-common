@@ -15,7 +15,7 @@
  * 02110-1301, USA.
  *
  */
-
+#define DEBUG 1
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/gpio.h>

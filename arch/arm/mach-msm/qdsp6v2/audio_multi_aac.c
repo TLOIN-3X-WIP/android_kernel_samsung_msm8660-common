@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG 1
 #include <linux/msm_audio_aac.h>
 #include "audio_utils_aio.h"
 

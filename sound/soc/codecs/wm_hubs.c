@@ -363,6 +363,8 @@ static int hp_supply_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct wm_hubs_data *hubs = snd_soc_codec_get_drvdata(codec);
 
+	printk(KERN_DEBUG "%s: MARK mw_hubs\n", __func__);
+
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		switch (hubs->hp_startup_mode) {
@@ -403,6 +405,8 @@ static int hp_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_codec *codec = w->codec;
 	unsigned int reg = snd_soc_read(codec, WM8993_ANALOGUE_HP_0);
+
+	printk(KERN_DEBUG "%s: MARK wm_hubs\n", __func__);
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:

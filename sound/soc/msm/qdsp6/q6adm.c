@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#define DEBUG 1
 #include <linux/slab.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
@@ -604,6 +604,9 @@ int adm_matrix_map(int session_id, int path, int num_copps,
 					__func__, port_id[0]);
 		ret = -EINVAL;
 		goto fail_cmd;
+	} else {
+		pr_err("%s: ADM routing for port %d OK\n",
+					__func__, port_id[0]);
 	}
 	ret = wait_event_timeout(this_adm.wait,
 				atomic_read(&this_adm.copp_stat[index]),

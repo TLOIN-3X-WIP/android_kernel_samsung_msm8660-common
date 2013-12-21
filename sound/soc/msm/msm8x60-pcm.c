@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#define DEBUG 1
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/module.h>
@@ -202,7 +202,7 @@ static void event_handler(uint32_t opcode,
 				break;
 			if (prtd->mmap_flag) {
 				pr_debug("%s:writing %d bytes"
-					" of buffer to dsp\n",
+					" of buffer to dsp (mmap)\n",
 					__func__,
 					prtd->pcm_count);
 				q6asm_write_nolock(prtd->audio_client,
@@ -211,7 +211,7 @@ static void event_handler(uint32_t opcode,
 			} else {
 				while (atomic_read(&prtd->out_needed)) {
 					pr_debug("%s:writing %d bytes"
-						 " of buffer to dsp\n",
+						 " of buffer to dsp (no-mmap)\n",
 						__func__,
 						prtd->pcm_count);
 					q6asm_write_nolock(prtd->audio_client,
@@ -248,8 +248,12 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	/* rate and channels are sent to audio driver */
 	prtd->samp_rate = runtime->rate;
 	prtd->channel_mode = runtime->channels;
-	if (prtd->enabled)
+	if (prtd->enabled) {
+		printk(KERN_DEBUG "%s: ALREADY ENABLED\n", __func__);
 		return 0;
+	} else {
+		printk(KERN_DEBUG "%s: ENABLING\n", __func__);
+	}
 
 	ret = q6asm_media_format_block_pcm(prtd->audio_client, runtime->rate,
 				runtime->channels);
@@ -259,11 +263,10 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	atomic_set(&prtd->out_count, runtime->periods);
 	atomic_set(&prtd->in_count, 0);
 	for (i = 0; i < MAX_COPP; i++) {
-		pr_debug("prtd->session_id = %d, copp_id= %d",
-			prtd->session_id, i);
 		if (session_route.playback_session[substream->number][i]
 				!= DEVICE_IGNORE) {
-			pr_err("Device active\n");
+			pr_debug("Device active: prtd->session_id = %d, copp_id= %d\n",
+				prtd->session_id, i);
 			if (i == PCM_RX)
 				dev_rate = 8000;
 			msm_snddev_set_dec(prtd->session_id,
@@ -466,7 +469,7 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 	struct msm_audio *prtd = runtime->private_data;
 
 	fbytes = frames_to_bytes(runtime, frames);
-	pr_debug("%s: prtd->out_count = %d\n",
+	pr_debug("%s: prtd->out_count = %d JCS\n",
 				__func__, atomic_read(&prtd->out_count));
 	ret = wait_event_timeout(the_locks.write_wait,
 			(atomic_read(&prtd->out_count)), 5 * HZ);
@@ -527,10 +530,8 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 	q6asm_audio_client_buf_free_contiguous(dir,
 				prtd->audio_client);
 
-	pr_debug("%s\n", __func__);
 	auddev_unregister_evt_listner(AUDDEV_CLNT_DEC,
 		substream->number);
-	pr_debug("%s\n", __func__);
 	msm_clear_session_id(prtd->session_id);
 	q6asm_audio_client_free(prtd->audio_client);
 	kfree(prtd);
@@ -647,6 +648,8 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 
+	printk(KERN_DEBUG "%s:\n", __func__);
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		ret = msm_pcm_playback_close(substream);
 	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
@@ -748,6 +751,9 @@ static int msm_pcm_new(struct snd_soc_pcm_runtime *rtd)
 	struct snd_card *card = rtd->card->snd_card;
 	struct snd_pcm *pcm = rtd->pcm;
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+	// dump_stack();
+
 #ifndef CONFIG_MACH_TENDERLOIN
 	ret = snd_pcm_new_stream(pcm, SNDRV_PCM_STREAM_PLAYBACK, 2);
 	if (ret)
@@ -772,6 +778,7 @@ EXPORT_SYMBOL(msm_soc_platform);
 
 static __devinit int msm_pcm_probe(struct platform_device *pdev)
 {
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	dev_info(&pdev->dev, "%s: dev name %s\n", __func__, dev_name(&pdev->dev));
 	return snd_soc_register_platform(&pdev->dev,
 				&msm_soc_platform);
@@ -794,6 +801,7 @@ static struct platform_driver msm_pcm_driver = {
 
 static int __init msm_soc_platform_init(void)
 {
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	return platform_driver_register(&msm_pcm_driver);
 }
 module_init(msm_soc_platform_init);

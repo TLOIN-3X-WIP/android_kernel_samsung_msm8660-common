@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG 1
 #include <linux/types.h>
 #include <linux/msm_audio_wmapro.h>
 #include "audio_utils_aio.h"

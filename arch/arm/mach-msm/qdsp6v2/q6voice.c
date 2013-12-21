@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  *
  */
+#define DEBUG 1
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/module.h>

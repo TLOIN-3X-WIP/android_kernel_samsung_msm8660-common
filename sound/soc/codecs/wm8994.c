@@ -11,6 +11,8 @@
  * published by the Free Software Foundation.
  */
 
+#define DEBUG 1
+#define VERBOSE_DEBUG 1
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -1897,6 +1899,8 @@ static int wm8994_set_bias_level(struct snd_soc_codec *codec,
 	struct wm8994 *control = codec->control_data;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
+
 	switch (level) {
 	case SND_SOC_BIAS_ON:
 		break;
@@ -2023,6 +2027,8 @@ static int wm8994_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	int aif1_reg;
 	int ms = 0;
 	int aif1 = 0;
+
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 
 	switch (dai->id) {
 	case 1:
@@ -2165,6 +2171,8 @@ int wm8994_hw_params(struct snd_pcm_substream *substream,
 	int id = dai->id - 1;
 
 	int i, cur_val, best_val, bclk_rate, best;
+
+	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 
 	switch (dai->id) {
 	case 1:
@@ -2962,6 +2970,9 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	codec->control_data = dev_get_drvdata(codec->dev->parent);
 	control = codec->control_data;
 
+	printk(KERN_DEBUG "%s: CALLEDWOOHOO\n", __func__);
+	// dump_stack();
+
 	wm8994 = kzalloc(sizeof(struct wm8994_priv), GFP_KERNEL);
 	if (wm8994 == NULL)
 		return -ENOMEM;
@@ -3358,6 +3369,7 @@ static struct snd_soc_codec_driver soc_codec_dev_wm8994 = {
 
 static int __devinit wm8994_probe(struct platform_device *pdev)
 {
+	printk(KERN_DEBUG "%s: CALLEDITWOOHOO\n", __func__);
 	return snd_soc_register_codec(&pdev->dev, &soc_codec_dev_wm8994,
 			wm8994_dai, ARRAY_SIZE(wm8994_dai));
 }
@@ -3379,6 +3391,7 @@ static struct platform_driver wm8994_codec_driver = {
 
 static __init int wm8994_init(void)
 {
+	printk(KERN_DEBUG "%s: CALLEDITWOOHOO\n", __func__);
 	return platform_driver_register(&wm8994_codec_driver);
 }
 module_init(wm8994_init);
