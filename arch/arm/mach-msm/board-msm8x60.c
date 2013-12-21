@@ -108,6 +108,8 @@
 #include <linux/ion.h>
 #include <mach/ion.h>
 
+void tenderloin_clock_fixup(void);
+
 #define MSM_SHARED_RAM_PHYS 0x40000000
 #ifdef CONFIG_KEYPAD_CYPRESS_TOUCH
 #define PMIC_GPIO_TKEY_INT	PM8058_GPIO(13) 	/* PMIC GPIO Number 13 */
@@ -5922,6 +5924,134 @@ static int pm8058_gpios_init(void)
 
 	return 0;
 }
+
+static int tenderloin_pm8058_gpios_init(void)
+{
+	int i;
+	int rc;
+	struct pm8058_gpio_cfg {
+		int                gpio;
+		struct pm_gpio	   cfg;
+	};
+
+	struct pm8058_gpio_cfg gpio_cfgs[] = {
+		{
+            /*LCD BL PWM, PMIC GPIO24 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(23),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_VPH,
+				.function       = PM_GPIO_FUNC_2,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*LCD BL ENABLE, PMIC GPIO25 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(24),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_VPH,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+				.output_value	= 1,
+			},
+		},
+		{
+            /*UIM CLK, PMIC GPIO29 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(28),
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_1,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*UIM CLK, PMIC GPIO30 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(29),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_1,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*UIM Reset, PMIC GPIO32 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(31),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*Proximity reset, PMIC GPIO36 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(35),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*USB ID, PMIC GPIO37 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(36),
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*SSBI PMIC CLK, PMIC GPIO39 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(38),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_1,
+				.inv_int_pol    = 0,
+			},
+		},
+		{
+            /*Proximity interrupt, PMIC GPIO40 in schematic*/
+			PM8058_GPIO_PM_TO_SYS(39),
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+
+	};
+
+
+	for (i = 0; i < ARRAY_SIZE(gpio_cfgs); ++i) {
+		rc = pm8xxx_gpio_config(gpio_cfgs[i].gpio,
+				&gpio_cfgs[i].cfg);
+		if (rc < 0) {
+			pr_err("%s pmic gpio config failed\n",
+				__func__);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
 #ifdef CONFIG_KEYPAD_CYPRESS_TOUCH
 	rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_TKEY_INT), &tkey_int);
 	if (rc) {
@@ -10583,7 +10713,9 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 	msm_clock_init(&msm8x60_clock_init_data);
 
-	/* TODO msm_clock_fixup() */
+	if (machine_is_tenderloin() && 0) {
+		tenderloin_clock_fixup();
+	}
 
 	/* Buses need to be initialized before early-device registration
 	 * to get the platform data for fabrics.
@@ -10681,7 +10813,8 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
 	    machine_is_msm8x60_fluid() || machine_is_msm8x60_fusion() ||
-	    machine_is_msm8x60_fusn_ffa() || machine_is_msm8x60_dragon()) {
+	    machine_is_msm8x60_fusn_ffa() || machine_is_msm8x60_dragon()
+		 || machine_is_tenderloin()) {
 		msm8x60_cfg_smsc911x();
 		if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 1)
 			platform_add_devices(msm_footswitch_devices,
@@ -10788,7 +10921,11 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 				msm_pm_data);
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 
-	pm8058_gpios_init();
+	if (machine_is_tenderloin()) {
+		tenderloin_pm8058_gpios_init();
+	} else {
+		pm8058_gpios_init();
+	}
 
 #ifdef CONFIG_SENSORS_MSM_ADC
 	if (machine_is_msm8x60_fluid()) {
