@@ -6501,6 +6501,7 @@ unsigned int msm_adc_gpio_expander_disable(int cs_disable)
 };
 #endif
 
+#ifdef CONFIG_SENSORS_MSM_ADC
 static struct msm_adc_channels msm_adc_channels_data[] = {
 	{"vbatt", CHANNEL_ADC_VBATT, 0, &xoadc_fn, CHAN_PATH_TYPE2,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
@@ -6568,6 +6569,7 @@ static struct platform_device msm_adc_device = {
 		.platform_data = &msm_adc_pdata,
 	},
 };
+#endif
 
 static void pmic8058_xoadc_mpp_config(void)
 {
