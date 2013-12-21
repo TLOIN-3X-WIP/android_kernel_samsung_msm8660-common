@@ -14,6 +14,7 @@
  *
  */
 #define DEBUG 1
+#define USE_ION_AUDIO 0
 #include <linux/fs.h>
 #include <linux/mutex.h>
 #include <linux/wait.h>
@@ -242,7 +243,7 @@ int q6asm_audio_client_buf_free(unsigned int dir,
 
 		while (cnt >= 0) {
 			if (port->buf[cnt].data) {
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 				ion_unmap_kernel(port->buf[cnt].client,
 						port->buf[cnt].handle);
 				ion_free(port->buf[cnt].client,
@@ -305,7 +306,7 @@ int q6asm_audio_client_buf_free_contiguous(unsigned int dir,
 	}
 
 	if (port->buf[0].data) {
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 		ion_unmap_kernel(port->buf[0].client, port->buf[0].handle);
 		ion_free(port->buf[0].client, port->buf[0].handle);
 		ion_client_destroy(port->buf[0].client);
@@ -490,7 +491,7 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 	int cnt = 0;
 	int rc = 0;
 	struct audio_buffer *buf;
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 	int len;
 #endif
 
@@ -522,7 +523,7 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 		while (cnt < bufcnt) {
 			if (bufsz > 0) {
 				if (!buf[cnt].data) {
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 					buf[cnt].client = msm_ion_client_create
 						(UINT_MAX, "audio_client");
 					if (IS_ERR_OR_NULL((void *)
@@ -634,7 +635,7 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 	int cnt = 0;
 	int rc = 0;
 	struct audio_buffer *buf;
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 	int len;
 #else
 	int flags = 0;
@@ -664,7 +665,7 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 
 	ac->port[dir].buf = buf;
 
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 	buf[0].client = msm_ion_client_create(UINT_MAX, "audio_client");
 	if (IS_ERR_OR_NULL((void *)buf[0].client)) {
 		pr_err("%s: ION create client for AUDIO failed\n", __func__);

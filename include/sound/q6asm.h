@@ -12,10 +12,14 @@
 #ifndef __Q6_ASM_H__
 #define __Q6_ASM_H__
 
+#ifndef USE_ION_AUDIO
+#define USE_ION_AUDIO 0
+#endif
+
 #include <mach/qdsp6v2/apr.h>
 #include <mach/msm_subsystem_map.h>
 #include <sound/apr_audio.h>
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 #include <linux/ion.h>
 #endif
 
@@ -100,7 +104,7 @@ struct audio_buffer {
 	uint32_t   used;
 	uint32_t   size;/* size of buffer */
 	uint32_t   actual_size; /* actual number of bytes read by DSP */
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+#if defined(CONFIG_MSM_MULTIMEDIA_USE_ION) && USE_ION_AUDIO
 	struct ion_handle *handle;
 	struct ion_client *client;
 #else
