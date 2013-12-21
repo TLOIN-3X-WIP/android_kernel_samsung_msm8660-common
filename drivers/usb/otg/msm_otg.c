@@ -906,6 +906,7 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 
 	if (motg->chg_type == USB_SDP_CHARGER)
 		charger_type = POWER_SUPPLY_TYPE_USB;
+#if 0
 	else if (motg->chg_type == USB_CDP_CHARGER)
 		charger_type = POWER_SUPPLY_TYPE_USB_CDP;
 	else if (motg->chg_type == USB_DCP_CHARGER)
@@ -915,6 +916,7 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 		motg->chg_type == USB_ACA_B_CHARGER ||
 		motg->chg_type == USB_ACA_C_CHARGER))
 		charger_type = POWER_SUPPLY_TYPE_USB_ACA;
+#endif
 	else
 		charger_type = POWER_SUPPLY_TYPE_BATTERY;
 
