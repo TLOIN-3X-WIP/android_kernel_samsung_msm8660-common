@@ -84,3 +84,4 @@ endif
 obj-$(CONFIG_KERNEL_LOG)	+= klog.o
 obj-$(CONFIG_HSUART)		+= hsuart.o
 obj-$(CONFIG_USER_PINS)         += user-pins.o
+obj-$(CONFIG_HRES_COUNTER)	+= hres_counter.o
