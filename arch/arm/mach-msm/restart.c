@@ -83,7 +83,7 @@ static void __iomem *msm_tmr0_base;
 static int in_panic;
 static void *dload_mode_addr;
 
-#if 0	/* onlyjazz.ef24 : intentionally remove it */
+#ifdef CONFIG_MACH_TENDERLOIN /* onlyjazz.ef24 : intentionally remove it */
 /* Download mode master kill-switch */
 static int dload_set(const char *val, struct kernel_param *kp);
 static int download_mode = 1;
@@ -120,7 +120,7 @@ static void set_dload_mode(int on)
 	}
 }
 
-#if 0	/* onlyjazz.ef24 : intentionally remove it */
+#ifdef CONFIG_MACH_TENDERLOIN /* onlyjazz.ef24 : intentionally remove it */
 static int dload_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
@@ -241,7 +241,7 @@ void arch_reset(char mode, const char *cmd)
 		set_dload_mode(1);
 #endif
 
-	#if 0 /* onlyjazz.ef24 : intentionally remove it */
+	#ifdef CONFIG_MACH_TENDERLOIN /* onlyjazz.ef24 : intentionally remove it */
 	/* Kill download mode if master-kill switch is set */
 	if (!download_mode)
 		set_dload_mode(0);
@@ -296,13 +296,13 @@ void arch_reset(char mode, const char *cmd)
 			__raw_writel(RESTART_OTHERBOOT_MODE, restart_reason);
 		}
 	}
-#if 1
+#ifndef CONFIG_MACH_TENDERLOIN
 	else {
 		writel(0x12345678, restart_reason);    /* clear abnormal reset flag */
 	}
 #endif
 
-#if 0 /* onlyjazz.el20 : it was commented out in celox gingerbread, according to the request from waro.park */
+#ifdef CONFIG_MACH_TENDERLOIN /* onlyjazz.el20 : it was commented out in celox gingerbread, according to the request from waro.park */
 	__raw_writel(0, msm_tmr0_base + WDT0_EN);
 	if (!(machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())) {
 		mb();
