@@ -8500,6 +8500,16 @@ static void __init msm8x60_init_ebi2(void)
 			 * 4 are the write delay. */
 			writel_relaxed(0x031F1C99, ebi2_cfg_ptr + 0x10);
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
+// HP Wade Wang:
+			if (board_is_topaz_wifi())
+			{
+				/* EBI2 CS3 muxed address/data,
+				 * two cyc addr enable */
+				writel(0xA3030020, ebi2_cfg_ptr + 0x34);
+			}
+			else
+// End
+			{
 			/*
 			 * RECOVERY=5, HOLD_WR=1
 			 * INIT_LATENCY_WR=1, INIT_LATENCY_RD=1
@@ -8511,6 +8521,7 @@ static void __init msm8x60_init_ebi2(void)
 			 * ADV_OE_RECOVERY=0, ADDR_HOLD_ENA=1
 			 */
 			writel_relaxed(0x01000020, ebi2_cfg_ptr + 0x34);
+			}
 #else
 			/* EBI2 CS3 muxed address/data,
 			* two cyc addr enable */
