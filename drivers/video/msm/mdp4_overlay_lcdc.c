@@ -747,7 +747,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	hsync_polarity = 0;
 	vsync_polarity = 0;
 #endif
-#ifdef CONFIG_SAMSUNG_8X60_TABLET
+#if defined(CONFIG_SAMSUNG_8X60_TABLET) || defined(CONFIG_MACH_TENDERLOIN)
 	data_en_polarity = 0;
 #else
 	data_en_polarity = 1;
