@@ -133,9 +133,6 @@ static int msm_snddev_rx_mclk_request(void)
 {
 	int rc = 0;
 
-	printk(KERN_DEBUG "%s: gpio=%d\n", __func__,
-			the_msm_cdcclk_ctl_state.rx_mclk);
-
 	rc = gpio_request(the_msm_cdcclk_ctl_state.rx_mclk,
 		"MSM_SNDDEV_RX_MCLK");
 	if (rc < 0) {
@@ -308,7 +305,6 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 	wake_lock(&drv->rx_idlelock);
 
 	if (drv->snddev_vreg) {
-		printk(KERN_DEBUG "%s: MARK A\n", __func__);
 		if (!strcmp(icodec->data->name, "headset_stereo_rx"))
 			vreg_mode_vote(drv->snddev_vreg, 1,
 					SNDDEV_LOW_POWER_MODE);
@@ -1032,8 +1028,6 @@ static int snddev_icodec_probe(struct platform_device *pdev)
 	struct msm_snddev_info *dev_info;
 	struct snddev_icodec_state *icodec;
 
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
-
 	if (!pdev || !pdev->dev.platform_data) {
 		printk(KERN_ALERT "Invalid caller\n");
 		rc = -1;
@@ -1108,7 +1102,6 @@ static int __init snddev_icodec_init(void)
 	s32 rc;
 	struct snddev_icodec_drv_state *icodec_drv = &snddev_icodec_drv;
 
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	rc = platform_driver_register(&snddev_icodec_driver);
 	if (IS_ERR_VALUE(rc)) {
 		pr_err("%s: platform_driver_register for snddev icodec failed\n",

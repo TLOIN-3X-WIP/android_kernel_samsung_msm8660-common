@@ -11,8 +11,7 @@
  *  option) any later version.
  *
  */
-#define DEBUG 1
-#define VERBOSE_DEBUG 1
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -109,10 +108,6 @@ static int wm8994_write(struct wm8994 *wm8994, unsigned short reg,
 
 	BUG_ON(bytes % 2);
 	BUG_ON(bytes <= 0);
-
-	if (reg == 0 && be16_to_cpu(buf[0]) == 0x8994) {
-		dump_stack();
-	}
 
 	for (i = 0; i < bytes / 2; i++) {
 		dev_vdbg(wm8994->dev, "Write %04x to R%d(0x%x)\n",

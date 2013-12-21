@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
+
 #include "audio_utils_aio.h"
 
 #define FRAME_SIZE_DEC_QCELP  ((32) + sizeof(struct dec_meta_in))

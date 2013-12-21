@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#define DEBUG 1
+
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/module.h>

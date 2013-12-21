@@ -12,7 +12,7 @@
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
  */
-#define DEBUG 1
+
 #include <linux/platform_device.h>
 #include <sound/core.h>
 #include <sound/pcm.h>

@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
+
 #include <linux/io.h>
 #include <linux/fs.h>
 #include <linux/module.h>

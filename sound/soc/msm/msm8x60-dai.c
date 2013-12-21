@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, you can find it at http://www.fsf.org.
  */
-#define DEBUG 1
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -77,7 +77,6 @@ static struct snd_soc_codec_driver soc_codec_dev_msm = {
 
 static __devinit int asoc_msm_codec_probe(struct platform_device *pdev)
 {
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	dev_info(&pdev->dev, "%s: dev name %s\n", __func__, dev_name(&pdev->dev));
 	return snd_soc_register_codec(&pdev->dev, &soc_codec_dev_msm,
                         msm_pcm_codec_dais, ARRAY_SIZE(msm_pcm_codec_dais));
@@ -91,8 +90,7 @@ static int __devexit asoc_msm_codec_remove(struct platform_device *pdev)
 
 static __devinit int asoc_msm_cpu_probe(struct platform_device *pdev)
 {
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
-	dev_info(&pdev->dev, "%s: dev HAS THE name %s\n", __func__, dev_name(&pdev->dev));
+	dev_info(&pdev->dev, "%s: dev name %s\n", __func__, dev_name(&pdev->dev));
 	return snd_soc_register_dai(&pdev->dev, msm_pcm_cpu_dais);
 }
 
@@ -122,7 +120,6 @@ static struct platform_driver asoc_msm_cpu_driver = {
 
 static int __init msm_codec_dai_init(void)
 {
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	return platform_driver_register(&asoc_msm_codec_driver);
 }
 
@@ -133,7 +130,6 @@ static void __exit msm_codec_dai_exit(void)
 
 static int __init msm_cpu_dai_init(void)
 {
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	return platform_driver_register(&asoc_msm_cpu_driver);
 }
 

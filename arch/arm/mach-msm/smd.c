@@ -914,8 +914,6 @@ static void do_smd_probe(void)
 	if (shared->heap_info.free_offset != last_heap_free) {
 		last_heap_free = shared->heap_info.free_offset;
 		schedule_work(&probe_work);
-		printk(KERN_DEBUG "%s: CALLED\n", __func__);
-		dump_stack();
 	}
 }
 
@@ -1950,7 +1948,6 @@ void *smem_alloc2(unsigned id, unsigned size_in)
 			ret = (void *)(MSM_SHARED_RAM_BASE + toc[id].offset);
 	} else if (id > SMEM_FIXED_ITEM_LAST) {
 		SMD_DBG("%s: allocating %u\n", __func__, id);
-		printk(KERN_DEBUG "%s: allocating %u\n", __func__, id);
 		if (shared->heap_info.heap_remaining >= size_in) {
 			toc[id].offset = shared->heap_info.free_offset;
 			toc[id].size = size_in;
@@ -2746,10 +2743,6 @@ int smd_core_init(void)
 
 static int __devinit msm_smd_probe(struct platform_device *pdev)
 {
-	// XXX -JCS
-	/* enable smd and smsm info messages */
-	msm_smd_debug_mask = 0xc;
-
 	SMD_INFO("smd probe\n");
 
 	INIT_WORK(&probe_work, smd_channel_probe_worker);

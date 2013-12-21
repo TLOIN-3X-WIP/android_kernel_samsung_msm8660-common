@@ -13,7 +13,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
 #define USE_ION_AUDIO 0
 #include <linux/fs.h>
 #include <linux/mutex.h>
@@ -834,6 +833,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 	unsigned long dsp_flags;
 	uint32_t *payload;
 	uint32_t wakeup_flag = 1;
+
 
 	if ((ac == NULL) || (data == NULL)) {
 		pr_err("ac or priv NULL\n");

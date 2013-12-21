@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#define DEBUG 1
+
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
@@ -279,11 +279,6 @@ int afe_sizeof_cfg_cmd(u16 port_id)
 	case MI2S_RX:
 	case MI2S_TX:
 		ret_size = SIZEOF_CFG_CMD(afe_port_mi2s_cfg);
-#if 0
-		printk(KERN_DEBUG "%s: port_id=%u ret_size=%d\n", __func__,
-					port_id, ret_size);
-		dump_stack();
-#endif
 		ret_size = 36;
 		break;
 	case HDMI_RX:

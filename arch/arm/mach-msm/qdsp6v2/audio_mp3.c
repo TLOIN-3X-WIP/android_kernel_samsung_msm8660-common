@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
+
 #include "audio_utils_aio.h"
 
 static void q6_audio_mp3_cb(uint32_t opcode, uint32_t token,

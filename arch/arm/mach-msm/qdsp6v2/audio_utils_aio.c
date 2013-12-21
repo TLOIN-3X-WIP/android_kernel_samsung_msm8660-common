@@ -12,7 +12,7 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
+
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>

@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
@@ -287,9 +286,6 @@ EXPORT_SYMBOL(msm_set_voice_vol);
 void msm_snddev_register(struct msm_snddev_info *dev_info)
 {
 	mutex_lock(&session_lock);
-	printk(KERN_DEBUG "%s: registering dev %d - %s\n", __func__,
-			audio_dev_ctrl.num_dev, dev_info->name);
-	// dump_stack();
 	if (audio_dev_ctrl.num_dev < AUDIO_DEV_CTL_MAX_DEV) {
 		audio_dev_ctrl.devs[audio_dev_ctrl.num_dev] = dev_info;
 		/* roughly 0 DB for digital gain
@@ -691,8 +687,6 @@ struct msm_snddev_info *audio_dev_ctrl_find_dev(u32 dev_id)
 
 	if ((audio_dev_ctrl.num_dev - 1) < dev_id) {
 		info = ERR_PTR(-ENODEV);
-		printk(KERN_DEBUG "%s: invalid id %d > %d\n", __func__,
-				dev_id, (audio_dev_ctrl.num_dev - 1));
 		goto error;
 	}
 
@@ -1725,7 +1719,6 @@ static int __init audio_dev_ctrl_init(void)
 {
 	init_waitqueue_head(&audio_dev_ctrl.wait);
 
-	printk(KERN_DEBUG "%s: CALLED\n", __func__);
 	event.cb = NULL;
 	msm_reset_device_work_queue = create_workqueue("reset_device");
 	if (msm_reset_device_work_queue == NULL)
