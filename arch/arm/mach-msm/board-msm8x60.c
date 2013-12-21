@@ -8474,7 +8474,8 @@ static void __init msm8x60_init_ebi2(void)
 
 		if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
 			machine_is_msm8x60_fluid() ||
-			machine_is_msm8x60_dragon())
+			machine_is_msm8x60_dragon() ||
+			machine_is_tenderloin())
 			ebi2_cfg |= (1 << 4) | (1 << 5); /* CS2, CS3 */
 		else if (machine_is_msm8x60_sim())
 			ebi2_cfg |= (1 << 4); /* CS2 */
@@ -8486,7 +8487,8 @@ static void __init msm8x60_init_ebi2(void)
 	}
 
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
-	    machine_is_msm8x60_fluid() || machine_is_msm8x60_dragon()) {
+	    machine_is_msm8x60_fluid() || machine_is_msm8x60_dragon() ||
+		machine_is_tenderloin()) {
 		ebi2_cfg_ptr = ioremap_nocache(0x1a110000, SZ_4K);
 		if (ebi2_cfg_ptr != 0) {
 			/* EBI2_XMEM_CFG:PWRSAVE_MODE off */
@@ -11668,7 +11670,8 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 			machine_is_msm8x60_rumi3() ||
 			machine_is_msm8x60_sim() ||
 			machine_is_msm8x60_fluid() ||
-			machine_is_msm8x60_dragon())
+			machine_is_msm8x60_dragon() ||
+			machine_is_tenderloin())
 		msm8x60_init_ebi2();
 	msm8x60_init_tlmm();
 	if (!machine_is_tenderloin()) {
