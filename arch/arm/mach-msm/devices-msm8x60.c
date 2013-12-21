@@ -2695,6 +2695,13 @@ struct platform_device asoc_msm_dai1 = {
 	.id     = 0,
 };
 
+#if 0
+struct platform_device asoc_msm_wm8994 = {
+	.name   = "asoc-wm8994-codec",
+	.id     = 0,
+};
+#endif
+
 #if defined (CONFIG_MSM_8x60_VOIP)
 struct platform_device asoc_msm_mvs = {
 	.name   = "msm-mvs-audio",

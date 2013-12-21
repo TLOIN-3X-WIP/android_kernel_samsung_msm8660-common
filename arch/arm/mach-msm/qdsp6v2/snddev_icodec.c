@@ -184,6 +184,7 @@ static int get_msm_cdcclk_ctl_gpios(struct platform_device *pdev)
 	the_msm_cdcclk_ctl_state.rx_mclk = res->start;
 	the_msm_cdcclk_ctl_state.rx_mclk_requested = 0;
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
 			"msm_snddev_tx_mclk");
 	if (!res) {
@@ -192,6 +193,7 @@ static int get_msm_cdcclk_ctl_gpios(struct platform_device *pdev)
 	}
 	the_msm_cdcclk_ctl_state.tx_mclk = res->start;
 	the_msm_cdcclk_ctl_state.tx_mclk_requested = 0;
+#endif
 
 	return rc;
 }
@@ -223,6 +225,7 @@ static int snddev_icodec_open_lb(struct snddev_icodec_state *icodec)
 		vreg_mode_vote(drv->snddev_vreg, 1,
 					SNDDEV_LOW_POWER_MODE);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (icodec->data->voltage_on)
 		icodec->data->voltage_on();
 
@@ -236,6 +239,7 @@ static int snddev_icodec_open_lb(struct snddev_icodec_state *icodec)
 	if (icodec->adie_path)
 		adie_codec_proceed_stage(icodec->adie_path,
 					ADIE_CODEC_DIGITAL_ANALOG_READY);
+#endif
 
 	if (icodec->data->pamp_on)
 		icodec->data->pamp_on();
@@ -341,6 +345,7 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 	}
 	clk_enable(drv->rx_bitclk);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (icodec->data->voltage_on)
 		icodec->data->voltage_on();
 
@@ -351,6 +356,7 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 	else
 		adie_codec_setpath(icodec->adie_path,
 					icodec->sample_rate, 256);
+#endif
 	/* OSR default to 256, can be changed for power optimization
 	 * If OSR is to be changed, need clock API for setting the divider
 	 */
@@ -377,6 +383,8 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 	if (trc < 0)
 		pr_err("%s: afe open failed, trc = %d\n", __func__, trc);
 
+#ifndef CONFIG_MACH_TENDERLOIN
+
 	/* Enable ADIE */
 	if (icodec->adie_path) {
 		adie_codec_proceed_stage(icodec->adie_path,
@@ -397,6 +405,7 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 			goto error_pamp;
 		}
 	}
+#endif
 
 	icodec->enabled = 1;
 
@@ -426,6 +435,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 	if (drv->snddev_vreg)
 		vreg_mode_vote(drv->snddev_vreg, 1, SNDDEV_HIGH_POWER_MODE);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	/* Reuse pamp_on for TX platform-specific setup  */
 	if (icodec->data->pamp_on) {
 		if (icodec->data->pamp_on()) {
@@ -433,6 +443,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 			goto error_pamp;
 		}
 	}
+#endif
 
 #ifdef CONFIG_VP_A2220
 	if (icodec->data->a2220_vp_on) {
@@ -443,7 +454,9 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 	}	
 #endif	
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	msm_snddev_tx_mclk_request();
+#endif
 
 	drv->tx_osrclk = clk_get(0, "i2s_mic_osr_clk");
 	if (IS_ERR(drv->tx_osrclk))
@@ -474,6 +487,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 
 	clk_enable(drv->tx_bitclk);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	/* Enable ADIE */
 	trc = adie_codec_open(icodec->data->profile, &icodec->adie_path);
 	if (IS_ERR_VALUE(trc))
@@ -481,7 +495,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 	else
 		adie_codec_setpath(icodec->adie_path,
 					icodec->sample_rate, 256);
-
+#endif
 	switch (icodec->data->channel_mode) {
 	case 2:
 		afe_channel_mode = MSM_AFE_STEREO;
@@ -501,6 +515,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 
 	trc = afe_open(icodec->data->copp_id, &afe_config, icodec->sample_rate);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (icodec->adie_path) {
 		adie_codec_proceed_stage(icodec->adie_path,
 					ADIE_CODEC_DIGITAL_READY);
@@ -512,6 +527,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 		adie_codec_set_master_mode(icodec->adie_path, 1);
 	else
 		adie_codec_set_master_mode(icodec->adie_path, 0);
+#endif
 
 	icodec->enabled = 1;
 
@@ -546,6 +562,7 @@ static int snddev_icodec_close_lb(struct snddev_icodec_state *icodec)
 	if (drv->snddev_vreg)
 		vreg_mode_vote(drv->snddev_vreg, 0, SNDDEV_LOW_POWER_MODE);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (icodec->adie_path) {
 		adie_codec_proceed_stage(icodec->adie_path,
 			ADIE_CODEC_DIGITAL_OFF);
@@ -555,6 +572,7 @@ static int snddev_icodec_close_lb(struct snddev_icodec_state *icodec)
 
 	if (icodec->data->voltage_off)
 		icodec->data->voltage_off();
+#endif
 
 	return 0;
 }
@@ -568,6 +586,7 @@ static int snddev_icodec_close_rx(struct snddev_icodec_state *icodec)
 	if (drv->snddev_vreg)
 		vreg_mode_vote(drv->snddev_vreg, 0, SNDDEV_HIGH_POWER_MODE);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	/* Disable power amplifier */
 	if (icodec->data->pamp_off)
 		icodec->data->pamp_off();
@@ -579,11 +598,14 @@ static int snddev_icodec_close_rx(struct snddev_icodec_state *icodec)
 		adie_codec_close(icodec->adie_path);
 		icodec->adie_path = NULL;
 	}
+#endif
 
 	afe_close(icodec->data->copp_id);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (icodec->data->voltage_off)
 		icodec->data->voltage_off();
+#endif
 
 	clk_disable(drv->rx_bitclk);
 	clk_disable(drv->rx_osrclk);
@@ -605,6 +627,7 @@ static int snddev_icodec_close_tx(struct snddev_icodec_state *icodec)
 	if (drv->snddev_vreg)
 		vreg_mode_vote(drv->snddev_vreg, 0, SNDDEV_HIGH_POWER_MODE);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	/* Disable ADIE */
 	if (icodec->adie_path) {
 		adie_codec_proceed_stage(icodec->adie_path,
@@ -612,17 +635,20 @@ static int snddev_icodec_close_tx(struct snddev_icodec_state *icodec)
 		adie_codec_close(icodec->adie_path);
 		icodec->adie_path = NULL;
 	}
+#endif
 
 	afe_close(icodec->data->copp_id);
 
 	clk_disable(drv->tx_bitclk);
 	clk_disable(drv->tx_osrclk);
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	msm_snddev_tx_mclk_free();
 
 	/* Reuse pamp_off for TX platform-specific setup  */
 	if (icodec->data->pamp_off)
 		icodec->data->pamp_off();
+#endif
 
 #ifdef CONFIG_VP_A2220
 	if (icodec->data->a2220_vp_off)
@@ -644,6 +670,7 @@ static int snddev_icodec_set_device_volume_impl(
 
 	icodec = dev_info->private_data;
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (icodec->data->dev_vol_type & SNDDEV_DEV_VOL_DIGITAL) {
 
 		rc = adie_codec_set_device_digital_volume(icodec->adie_path,
@@ -668,6 +695,7 @@ static int snddev_icodec_set_device_volume_impl(
 		pr_err("%s: Invalid device volume control\n", __func__);
 		return -EPERM;
 	}
+#endif
 	return rc;
 }
 
@@ -800,6 +828,7 @@ error:
 	return rc;
 }
 
+#ifndef CONFIG_MACH_TENDERLOIN
 static int snddev_icodec_check_freq(u32 req_freq)
 {
 	int rc = -EINVAL;
@@ -817,6 +846,7 @@ static int snddev_icodec_check_freq(u32 req_freq)
 	}
 	return rc;
 }
+#endif
 
 static int snddev_icodec_set_freq(struct msm_snddev_info *dev_info, u32 rate)
 {
@@ -829,6 +859,7 @@ static int snddev_icodec_set_freq(struct msm_snddev_info *dev_info, u32 rate)
 	}
 
 	icodec = dev_info->private_data;
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (adie_codec_freq_supported(icodec->data->profile, rate) != 0) {
 		pr_err("%s: adie_codec_freq_supported() failed\n", __func__);
 		rc = -EINVAL;
@@ -841,6 +872,7 @@ static int snddev_icodec_set_freq(struct msm_snddev_info *dev_info, u32 rate)
 		} else
 			icodec->sample_rate = rate;
 	}
+#endif
 
 	if (icodec->enabled) {
 		snddev_icodec_close(dev_info);
@@ -889,6 +921,7 @@ error:
 	return rc;
 
 }
+#ifndef CONFIG_MACH_TENDERLOIN
 static int snddev_icodec_enable_anc(struct msm_snddev_info *dev_info,
 	u32 enable)
 {
@@ -945,6 +978,7 @@ error:
 	return rc;
 
 }
+#endif
 
 int snddev_icodec_set_device_volume(struct msm_snddev_info *dev_info,
 		u32 volume)
@@ -1036,8 +1070,12 @@ static int snddev_icodec_probe(struct platform_device *pdev)
 		dev_info->dev_ops.enable_sidetone = NULL;
 
 	if (pdata->capability & SNDDEV_CAP_ANC) {
+#ifndef CONFIG_MACH_TENDERLOIN
 		dev_info->dev_ops.enable_anc =
 		snddev_icodec_enable_anc;
+#else
+		dev_info->dev_ops.enable_anc = NULL;
+#endif
 	} else {
 		dev_info->dev_ops.enable_anc = NULL;
 	}

@@ -31,6 +31,7 @@ void __init msm_rotator_update_bus_vectors(unsigned int xres,
 extern struct platform_device asoc_msm_pcm;
 extern struct platform_device asoc_msm_dai0;
 extern struct platform_device asoc_msm_dai1;
+extern struct platform_device asoc_msm_wm8994;
 #if defined (CONFIG_SND_MSM_MVS_DAI_SOC)
 extern struct platform_device asoc_msm_mvs;
 extern struct platform_device asoc_mvs_dai0;

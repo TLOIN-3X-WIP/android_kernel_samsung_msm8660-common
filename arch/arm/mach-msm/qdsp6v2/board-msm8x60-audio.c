@@ -199,7 +199,7 @@ static struct platform_device msm_aux_pcm_device = {
 	.resource       = msm_aux_pcm_resources,
 };
 
-#if 0 /* (-) ysseo 20110414 */
+#ifdef CONFIG_MACH_TENDERLOIN /* (-) ysseo 20110414 */
 static struct resource msm_mi2s_gpio_resources[] = {
 
 	{
@@ -5095,7 +5095,11 @@ static struct platform_device msm_iearpiece_device = {
 };
 
 static struct adie_codec_action_unit imic_48KHz_osr256_actions[] =
+#if !defined(CONFIG_MACH_TENDERLOIN) || 1
 	AMIC_PRI_MONO_OSR_256;
+#else
+	AMIC_PRI_MONO_8000_OSR_256; // TODO -JCS - same as above?
+#endif
 
 static struct adie_codec_hwsetting_entry imic_settings[] = {
 	{
@@ -5244,8 +5248,13 @@ static struct snddev_icodec_data snddev_ispkr_stereo_data = {
 	.profile = &ispkr_stereo_profile,
 	.channel_mode = 2,
 	.default_sample_rate = 48000,
+#ifndef CONFIG_MACH_TENDERLOIN
 	.pamp_on = msm_snddev_poweramp_on,
 	.pamp_off = msm_snddev_poweramp_off,
+#else
+	.pamp_on = NULL,
+	.pamp_off = NULL,
+#endif
 };
 
 static struct platform_device msm_ispkr_stereo_device = {
@@ -5254,7 +5263,11 @@ static struct platform_device msm_ispkr_stereo_device = {
 };
 
 static struct adie_codec_action_unit idmic_mono_48KHz_osr256_actions[] =
+#if !defined(CONFIG_MACH_TENDERLOIN) || 1
 	DMIC1_PRI_MONO_OSR_256;
+#else
+	DMIC1_PRI_MONO_8000_OSR_256; // TODO -JCS - same as above?
+#endif
 
 static struct adie_codec_hwsetting_entry idmic_mono_settings[] = {
 	{
@@ -5278,8 +5291,13 @@ static struct snddev_icodec_data snddev_ispkr_mic_data = {
 	.profile = &idmic_mono_profile,
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
+#ifndef CONFIG_MACH_TENDERLOIN
 	.pamp_on = msm_snddev_enable_dmic_power,
 	.pamp_off = msm_snddev_disable_dmic_power,
+#else
+	.pamp_on = NULL,
+	.pamp_off = NULL,
+#endif
 };
 
 static struct platform_device msm_ispkr_mic_device = {
@@ -7058,11 +7076,12 @@ static struct platform_device *snd_devices_fluid[] __initdata = {
 static struct platform_device *snd_devices_common[] __initdata = {
 	&msm_aux_pcm_device,
 	&msm_cdcclk_ctl_device,
-#if 0 /* (-) ysseo 20110414 */
+#ifdef CONFIG_MACH_TENDERLOIN /* (-) ysseo 20110414 */
 	&msm_mi2s_device,
-#endif
+#else
 	&msm_uplink_rx_device,
 	&msm_device_dspcrashd_8x60,
+#endif
 };
 
 #ifdef CONFIG_VP_A2220
@@ -7106,6 +7125,16 @@ static struct platform_device *snd_devices_ftm[] __initdata = {
 static struct platform_device *snd_devices_ftm[] __initdata = {};
 #endif
 
+static struct platform_device *snd_devices_tenderloin[] __initdata = {
+	&msm_ispkr_stereo_device,
+	&msm_ispkr_mic_device,
+	// &msm_phone_rx_device,
+	// &msm_phone_tx_device,
+	&msm_bt_sco_earpiece_device,
+	&msm_bt_sco_mic_device,
+	&msm_icodec_gpio_device,
+};
+
 void __init msm_snddev_init(void)
 {
 	int i;
@@ -7116,11 +7145,15 @@ void __init msm_snddev_init(void)
 
 	pr_err("%s \n",	__func__);
 
+#if 1
 	for (i = 0, dev_id = 0; i < ARRAY_SIZE(snd_devices_common); i++)
 		snd_devices_common[i]->id = dev_id++;
 
 	platform_add_devices(snd_devices_common,
 			ARRAY_SIZE(snd_devices_common));
+#else
+	dev_id = 0;
+#endif
 
 	/* Auto detect device base on machine info */
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_fusion()) {
@@ -7152,6 +7185,12 @@ void __init msm_snddev_init(void)
 
 		platform_add_devices(snd_devices_fluid,
 				ARRAY_SIZE(snd_devices_fluid));
+	} else if (machine_is_tenderloin()) {
+		for (i = 0; i < ARRAY_SIZE(snd_devices_tenderloin); i++)
+			snd_devices_tenderloin[i]->id = dev_id++;
+
+		platform_add_devices(snd_devices_tenderloin,
+				ARRAY_SIZE(snd_devices_tenderloin));
 	}
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa()
 		|| machine_is_msm8x60_fusion()

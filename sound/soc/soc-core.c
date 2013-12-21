@@ -780,6 +780,8 @@ int soc_pcm_close(struct snd_pcm_substream *substream)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		snd_soc_dai_digital_mute(codec_dai, 1);
 
+	substream->prepared = 0;
+
 	if (cpu_dai->driver->ops->shutdown)
 		cpu_dai->driver->ops->shutdown(substream, cpu_dai);
 
@@ -794,6 +796,11 @@ int soc_pcm_close(struct snd_pcm_substream *substream)
 	cpu_dai->runtime = NULL;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+#ifdef CONFIG_MACH_TENDERLOIN
+		snd_soc_dapm_stream_event(rtd,
+			codec_dai->driver->playback.stream_name,
+			SND_SOC_DAPM_STREAM_STOP);
+#else
 		/* start delayed pop wq here for playback streams */
 		if (rtd->pmdown_time) {
 			codec_dai->pop_wait = 1;
@@ -804,6 +811,7 @@ int soc_pcm_close(struct snd_pcm_substream *substream)
 			codec_dai->driver->playback.stream_name,
 			SND_SOC_DAPM_STREAM_STOP);
 		}
+#endif
 	} else {
 		/* capture streams can be powered down now */
 		snd_soc_dapm_stream_event(rtd,
@@ -869,6 +877,7 @@ int soc_pcm_prepare(struct snd_pcm_substream *substream)
 		cancel_delayed_work(&rtd->delayed_work);
 	}
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		snd_soc_dapm_stream_event(rtd,
 					  codec_dai->driver->playback.stream_name,
@@ -877,6 +886,19 @@ int soc_pcm_prepare(struct snd_pcm_substream *substream)
 		snd_soc_dapm_stream_event(rtd,
 					  codec_dai->driver->capture.stream_name,
 					  SND_SOC_DAPM_STREAM_START);
+#else
+	if (!substream->prepared) {
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+			snd_soc_dapm_stream_event(rtd,
+						  codec_dai->driver->playback.stream_name,
+						  SND_SOC_DAPM_STREAM_START);
+		else
+			snd_soc_dapm_stream_event(rtd,
+						  codec_dai->driver->capture.stream_name,
+						  SND_SOC_DAPM_STREAM_START);
+		substream->prepared = 1;
+	}
+#endif
 
 	snd_soc_dai_digital_mute(codec_dai, 0);
 
@@ -909,6 +931,7 @@ int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	if (codec_dai->driver->ops->hw_params) {
 		ret = codec_dai->driver->ops->hw_params(substream, params, codec_dai);
 		if (ret < 0) {
@@ -917,6 +940,7 @@ int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 			goto codec_err;
 		}
 	}
+#endif
 
 	if (cpu_dai->driver->ops->hw_params) {
 		ret = cpu_dai->driver->ops->hw_params(substream, params, cpu_dai);
@@ -1144,6 +1168,8 @@ int snd_soc_suspend(struct device *dev)
 	struct snd_soc_card *card = dev_get_drvdata(dev);
 	struct snd_soc_codec *codec;
 	int i;
+
+	// TODO -JCS BODGE/brute-force-ignore-suspend?
 
 	if (!card->instantiated) {
 		dev_dbg(card->dev, "uninsantiated card found card->name = %s\n",
@@ -1402,6 +1428,8 @@ int snd_soc_resume(struct device *dev)
 {
 	struct snd_soc_card *card = dev_get_drvdata(dev);
 	int i, ac97_control = 0;
+
+	// TODO -JCS BODGE/didn't-suspend?
 
 	if (!card->instantiated) {
 		dev_dbg(card->dev, "uninsantiated card found card->name = %s\n",
@@ -1780,7 +1808,7 @@ static int soc_post_component_init(struct snd_soc_card *card,
 
 #ifdef CONFIG_DEBUG_FS
 	/* add DSP sysfs entries */
-	if (!dai_link->dynamic)
+	if (!dai_link || !dai_link->dynamic)
 		goto out;
 
 	ret = soc_dsp_debugfs_add(rtd);

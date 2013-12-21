@@ -68,7 +68,7 @@
 #include <mach/msm_battery.h>
 #include <mach/msm_hsusb.h>
 #include <mach/gpiomux.h>
-#ifdef CONFIG_MSM_DSPS
+#if defined(CONFIG_MSM_DSPS) || 1
 #include <mach/msm_dsps.h>
 #endif
 #include <mach/msm_xo.h>
@@ -95,6 +95,10 @@
 
 #ifdef CONFIG_USER_PINS
 #include <linux/user-pins.h>
+#endif
+
+#ifdef CONFIG_MFD_WM8994
+#include <linux/mfd/wm8994/pdata.h>
 #endif
 
 #include "devices.h"
@@ -6814,6 +6818,7 @@ static struct platform_device *asoc_devices[] __initdata = {
 	&asoc_msm_pcm,
 	&asoc_msm_dai0,
 	&asoc_msm_dai1,
+	// &asoc_msm_wm8994,
 };
 
 extern struct platform_device tenderloin_fixed_reg_device[];
@@ -8449,6 +8454,162 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 };
 #endif
 
+#ifdef CONFIG_MFD_WM8994
+
+#define WM8994_LDO1_ENABLE 66
+#define WM8994_LDO2_ENABLE 108
+
+
+#if 0
+int wm8994_ldo_power(int enable)
+{
+		int ret = 0;
+		if (enable)
+		{
+				/* Power up the WM8994 LDOs */
+				pr_err("%s: Power up the WM8994 LDOs\n", __func__);
+				ret = gpio_request(WM8994_LDO1_ENABLE, "wm8994-ldo1");
+				if (ret != 0){
+						pr_err("Failed to get GPIO for WM8994 LDO1: %d\n", ret);
+						return ret;
+				}
+				gpio_direction_output(WM8994_LDO1_ENABLE, 1);
+				gpio_set_value_cansleep(WM8994_LDO1_ENABLE,1);
+				ret = gpio_request(WM8994_LDO2_ENABLE, "wm8994-ldo2");
+				if (ret != 0){
+						pr_err("Failed to get GPIO for WM8994 LDO2: %d\n", ret);
+						return ret;
+				}
+				gpio_direction_output(WM8994_LDO2_ENABLE, 1);
+				gpio_set_value_cansleep(WM8994_LDO2_ENABLE,1);
+		}else
+		{
+				pr_err("%s: Power down the WM8994 LDOs\n", __func__);
+				gpio_direction_output(WM8994_LDO1_ENABLE, 0);
+				gpio_direction_output(WM8994_LDO2_ENABLE, 0);
+				gpio_free(WM8994_LDO2_ENABLE);
+				gpio_free(WM8994_LDO1_ENABLE);
+		}
+		return ret;
+}
+
+#else
+int wm8994_ldo_power(int enable)
+{
+
+		gpio_tlmm_config(GPIO_CFG(66, 0, GPIO_CFG_OUTPUT,GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+		gpio_tlmm_config(GPIO_CFG(108, 0, GPIO_CFG_OUTPUT,GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+		if (enable)
+		{
+				pr_err("%s: Power up the WM8994 LDOs\n", __func__);
+				gpio_set_value_cansleep(66,1);
+				gpio_set_value_cansleep(108,1);
+		}else{
+				pr_err("%s: Power down the WM8994 LDOs\n", __func__);
+				gpio_set_value_cansleep(66,0);
+				gpio_set_value_cansleep(108,0);
+		}
+		return 0;
+
+}
+
+#endif
+EXPORT_SYMBOL(wm8994_ldo_power);
+
+static struct regulator *vreg_wm8958;
+static unsigned int msm_wm8958_setup_power(void)
+{
+		int rc=0;
+
+		pr_err("%s: codec power setup\n", __func__);
+		vreg_wm8958 = regulator_get(NULL, "8058_s3");
+		if (IS_ERR(vreg_wm8958)) {
+				pr_err("%s: Unable to get 8058_s3\n", __func__);
+				return -ENODEV;
+		}
+
+		if(regulator_set_voltage(vreg_wm8958, 1800000, 1800000))
+		{
+				pr_err("%s: Unable to set regulator voltage:"
+								" votg_8058_s3\n", __func__);
+		}
+		rc = regulator_enable(vreg_wm8958);
+
+		if (rc) {
+				pr_err("%s: Enable regulator 8058_s3 failed\n", __func__);
+
+		}
+		wm8994_ldo_power(1);
+		mdelay(30);
+		return rc;
+}
+
+static void msm_wm8958_shutdown_power(void)
+{
+#if 0
+		int rc;
+		pr_err("%s: codec power shutdown\n", __func__);
+		dump_stack();
+		wm8994_ldo_power(0);
+		rc = regulator_disable(vreg_wm8958);
+		if (rc)
+				pr_err("%s: Disable regulator 8058_s3 failed\n", __func__);
+
+		regulator_put(vreg_wm8958);
+#else
+		pr_err("%s: codec power shutdown - NOPE\n", __func__);
+		return;
+#endif
+}
+
+static int msm_wm8958_get_boardtype(void)
+{
+	if (board_is_topaz_3g()||board_is_topaz_wifi())
+		return 0;
+	 if(board_is_opal_3g() || board_is_opal_wifi())
+		return 1;
+	return -1;
+}
+
+static struct wm8994_pdata wm8994_pdata = {
+	.gpio_defaults = { 	0x0001, //GPIO1 AUDIO_AMP_EN write 0x41 to enable AMP
+						0x8001, //GPIO2 MCLK2 Pull Control
+						0x8001, //GPIO3 BCLK2 Pull Control
+						0x8001, //GPIO4 DACLRCLK2 Pull Control
+						0x8001, //GPIO5 DACDAT2 Pull Control
+						0x2005, //GPIO6 HEAD_MIC_DET to GPIO57 8660
+						0xa101, //GPIO7 N/A on wm8958, only wm8994
+						0xa101, //GPIO8 0xa101 not use
+						0xa101, //GPIO9 0xa101 not use
+						0xa101, //GPIO10 0xa101 not use
+						0xa101, //GPIO11 0xa101 not use
+	},
+
+	/* Put the line outputs into differential mode so that the driver
+	 * knows it can power the chip down to cold without pop/click issues.
+	 * Line outputs are not actually connected on the board.
+	 */
+	.num_enh_eq_cfgs = 1,
+	.lineout1_diff = 1,
+	.lineout2_diff = 1,
+	.wm8994_setup = msm_wm8958_setup_power,
+	.wm8994_shutdown = msm_wm8958_shutdown_power,
+	.micdet_irq = TENDERLOIN_AUD_HEAD_MIC_DET_IRQ_GPIO,
+	.micbias = { 0x0029, 0x002d, },
+};
+
+
+
+#define WM8994_I2C_SLAVE_ADDR	0x1a
+
+static struct i2c_board_info msm_i2c_gsbi7_wm8994_info[] = {
+	{
+		I2C_BOARD_INFO("wm8994", WM8994_I2C_SLAVE_ADDR),
+		.platform_data = &wm8994_pdata,
+	},
+};
+#endif
+
 #define PM_GPIO_CDC_RST_N 20
 #define GPIO_CDC_RST_N PM8058_GPIO_PM_TO_SYS(PM_GPIO_CDC_RST_N)
 
@@ -8707,8 +8868,7 @@ static struct msm_ssbi_platform_data msm8x60_ssbi_pm8901_pdata __devinitdata = {
 };
 #endif /* CONFIG_PMIC8901 */
 
-#if defined(CONFIG_MARIMBA_CORE) && (defined(CONFIG_GPIO_SX150X) \
-	|| defined(CONFIG_GPIO_SX150X_MODULE))
+#if defined(CONFIG_MARIMBA_CORE)
 
 static struct regulator *vreg_bahama;
 static int msm_bahama_sys_rst = GPIO_MS_SYS_RESET_N;
@@ -9064,6 +9224,14 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI3_QUP_I2C_BUS_ID,
 		msm_i2c_gsbi3_tdisc_info,
 		ARRAY_SIZE(msm_i2c_gsbi3_tdisc_info),
+	},
+#endif
+#ifdef CONFIG_MFD_WM8994
+{
+		I2C_TENDERLOIN,
+		MSM_GSBI7_QUP_I2C_BUS_ID,
+		msm_i2c_gsbi7_wm8994_info,
+		ARRAY_SIZE(msm_i2c_gsbi7_wm8994_info),
 	},
 #endif
 	{
@@ -9531,7 +9699,7 @@ static uint32_t topazwifi_tlmm_cfgs[] = {
 	GPIO_CFG(72, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(73, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 // yegw End
-#ifdef CONFIG_MFD_WM8958
+#ifdef CONFIG_MFD_WM8994
 	/* mic detect gpio  */
 	GPIO_CFG(57, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	/* jack detect gpio */
@@ -9580,7 +9748,7 @@ static uint32_t topaz3g_tlmm_cfgs[] = {
 	GPIO_CFG(72, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(73, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	// yegw End
-#ifdef CONFIG_MFD_WM8958
+#ifdef CONFIG_MFD_WM8994
 	/* mic detect gpio  */
 	GPIO_CFG(57, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	/* jack detect gpio */
@@ -9637,7 +9805,7 @@ static uint32_t opal_tlmm_cfgs[] = {
 	GPIO_CFG(72, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(73, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	// yegw End
-#ifdef CONFIG_MFD_WM8958
+#ifdef CONFIG_MFD_WM8994
 	/* mic detect gpio  */
 	GPIO_CFG(57, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	/* jack detect gpio */

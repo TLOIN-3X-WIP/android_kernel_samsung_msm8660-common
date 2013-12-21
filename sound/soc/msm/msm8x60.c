@@ -32,10 +32,42 @@
 #include <mach/qdsp6v2/audio_dev_ctl.h>
 #include <mach/qdsp6v2/q6voice.h>
 
+#include <sound/jack.h>
+#include <linux/mfd/wm8994/registers.h>
+
 #define LOOPBACK_ENABLE		0x1
 #define LOOPBACK_DISABLE	0x0
 
 #include "msm8x60-pcm.h"
+
+#ifdef CONFIG_MACH_TENDERLOIN
+#include <linux/mfd/wm8994/pdata.h>
+#include "../codecs/wm8994.h"
+#include <sound/jack.h>
+#include <linux/gpio.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
+#include <linux/delay.h>
+#include <linux/mfd/wm8994/registers.h>
+#include <linux/input.h>
+#include <sound/pcm_params.h>
+#include <linux/switch.h>
+#include <linux/slab.h>
+
+int headphone_plugged = 0;
+struct switch_dev *headphone_switch;
+
+#define WM_FS 48000
+#define WM_CHANNELS 2
+#define WM_BITS 16
+#define WM_FLL_MULT 8 /* 2*16*8 = 256, clock rates must be >= 256*fs */
+#define WM_BCLK (WM_FS * WM_CHANNELS * WM_BITS) /* 1.536MHZ */
+#define WM_FLL (WM_FLL_MULT * WM_BCLK) /* 12.288 MHZ */
+#define WM_FLL_MIN_RATE 4096000 /* The minimum clk rate required for AIF's */
+
+extern struct snd_soc_dai_driver wm8994_dai[];
+
+#endif
 
 static struct platform_device *msm_audio_snd_device;
 struct audio_locks the_locks;
@@ -70,6 +102,17 @@ static u32 opened_dev1 = -1;
 static u32 opened_dev2 = -1;
 static int last_active_rx_opened_dev = -1;
 static int last_active_tx_opened_dev = -1;
+
+#ifdef CONFIG_MACH_TENDERLOIN
+// name must match kernel command line argument
+static uint hs_uart = 0;
+static __init int set_hs_uart(char *str)
+{
+	get_option(&str, &hs_uart);
+	return 0;
+}
+early_param("hs_uart", set_hs_uart);
+#endif
 
 static int msm_scontrol_count_info(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_info *uinfo)
@@ -205,7 +248,7 @@ static int msm_volume_info(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_info *uinfo)
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-	uinfo->count = 2; /* Volume */
+	uinfo->count = 3; /* Volume */
 	uinfo->value.integer.min = 0;
 	uinfo->value.integer.max = 16383;
 	return 0;
@@ -356,6 +399,91 @@ static int msm_device_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef CONFIG_MACH_TENDERLOIN
+static int configure_wm_hw(struct msm_snddev_info *dev_info, struct snd_soc_codec *codec)
+{
+	int rc = 0;
+
+	/* if device is internal pcm, then configure wolfson codec */
+	if (dev_info->copp_id == PRIMARY_I2S_RX || dev_info->copp_id == PRIMARY_I2S_TX) {
+		struct snd_pcm_substream substream;
+		struct snd_pcm_hw_params params;
+		struct snd_soc_dai *codec_dai;
+		struct snd_soc_pcm_runtime *rt;
+		struct wm8994_priv *wm8994;
+		int fll = 0, fll_sysclk = 0, fll_rate = 0;
+		int aifclk = 0;
+		int bclk_rate = 0;
+		static int bclk_rate_tx = 0, bclk_rate_rx = 0;
+
+		if (dev_info->capability & SNDDEV_CAP_RX) {
+			rt = snd_soc_get_pcm_runtime(codec->card, "Playback");
+			substream.stream = SNDRV_PCM_STREAM_PLAYBACK;
+			fll = WM8994_FLL1;
+			fll_sysclk = WM8994_SYSCLK_FLL1;
+			aifclk = WM8994_AIF1_CLOCKING_1;
+		} else {
+			rt = snd_soc_get_pcm_runtime(codec->card, "Record");
+			substream.stream = SNDRV_PCM_STREAM_CAPTURE;
+			fll = WM8994_FLL2;
+			fll_sysclk = WM8994_SYSCLK_FLL2;
+			aifclk = WM8994_AIF2_CLOCKING_1;
+		}
+		codec_dai = rt->codec_dai;
+
+		wm8994 = snd_soc_codec_get_drvdata (codec_dai->codec);
+
+		params.intervals[SNDRV_PCM_HW_PARAM_CHANNELS - SNDRV_PCM_HW_PARAM_FIRST_INTERVAL].min = dev_info->channel_mode;
+		params.intervals[SNDRV_PCM_HW_PARAM_CHANNELS - SNDRV_PCM_HW_PARAM_FIRST_INTERVAL].max = dev_info->channel_mode;
+		params.intervals[SNDRV_PCM_HW_PARAM_RATE - SNDRV_PCM_HW_PARAM_FIRST_INTERVAL].min = dev_info->sample_rate;
+		params.intervals[SNDRV_PCM_HW_PARAM_RATE - SNDRV_PCM_HW_PARAM_FIRST_INTERVAL].max = dev_info->sample_rate;
+		snd_mask_set(&params.masks[SNDRV_PCM_HW_PARAM_FORMAT - SNDRV_PCM_HW_PARAM_FIRST_MASK], SNDRV_PCM_FORMAT_S16_LE);
+
+		/* Set fll rate by multiplying 2 channels even if its mono
+		 * aifclk rates need to be atleast 256*fs, 1 channel would make it 128*fs
+		 * also, must be >= 4.096Mhz and <= 12.5Mhz, refer to datasheet.
+		 */
+		bclk_rate = dev_info->sample_rate * WM_CHANNELS * WM_BITS;
+
+		if (dev_info->capability & SNDDEV_CAP_RX) {
+			if (bclk_rate_rx == bclk_rate) {
+				pr_info("aif1 codec rates are already configured, just return\n");
+				return rc;
+			}
+			bclk_rate_rx = bclk_rate;
+		} else {
+			if (bclk_rate_tx == bclk_rate) {
+				pr_info("aif2 codec rates are already configured, just return\n");
+				return rc;
+			}
+			bclk_rate_tx = bclk_rate;
+		}
+
+		fll_rate = bclk_rate * WM_FLL_MULT;
+		if (fll_rate < WM_FLL_MIN_RATE)
+			fll_rate = WM_FLL_MIN_RATE;
+
+		/* aif clocks are disabled when reconfiguring fll and bclk rates */
+		rc = snd_soc_dai_set_pll(codec_dai, fll, WM8994_FLL_SRC_BCLK, bclk_rate, fll_rate);
+		if (rc < 0) {
+			pr_err("Failed to set DAI FLL to rate %d: ret %d\n", WM_FLL_MULT * bclk_rate, rc);
+			return rc;
+		}
+
+		rc = snd_soc_dai_set_sysclk(codec_dai, fll_sysclk,
+						fll_rate, 0);
+		if (rc < 0) {
+			pr_err("Failed to set sysclk: ret %d\n", rc);
+			return rc;
+		}
+
+		wm8994_hw_params(&substream, &params, codec_dai);
+	}
+
+	return rc;
+}
+#endif
+
 static int msm_device_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
@@ -368,6 +496,8 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 	int tx_freq = 0;
 	int rx_freq = 0;
 	u32 set_freq = 0;
+
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
 	set = ucontrol->value.integer.value[0];
 	route_cfg.dev_id = ucontrol->id.numid - device_index;
@@ -530,6 +660,10 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 					loopback_status = 1;
 				}
 			}
+#ifdef CONFIG_MACH_TENDERLOIN
+			if (configure_wm_hw(dev_info, codec))
+				pr_err("%s: Could not configure wolfson hw properly!\n", __func__);
+#endif
 		}
 	} else {
 		if (dev_info->opened) {
@@ -1318,8 +1452,7 @@ static int msm_new_mixer(struct snd_soc_codec *codec)
 	for (idx = 0; idx < dev_cnt; idx++) {
 		if (!snd_dev_ctl_index(idx)) {
 			err = snd_ctl_add(codec->card->snd_card,
-				snd_ctl_new1(&snd_dev_controls[idx],
-					NULL));
+				snd_ctl_new1(&snd_dev_controls[idx], codec));
 			if (err < 0)
 				pr_err("%s:ERR adding ctl\n", __func__);
 		} else
@@ -1330,6 +1463,296 @@ static int msm_new_mixer(struct snd_soc_codec *codec)
 	device_index = simple_control + 1;
 	return 0;
 }
+
+#ifdef CONFIG_MACH_TENDERLOIN
+
+static struct snd_soc_jack hp_jack;
+static struct notifier_block	jack_notifier;
+static struct snd_soc_jack_pin hp_jack_pins[] = {
+	{.pin = "Headphone", .mask = SND_JACK_HEADPHONE },
+};
+static struct snd_soc_jack_gpio hp_jack_gpios[] = {
+	{
+		.gpio = 67,
+		.name = "hp-gpio",
+		.report = SND_JACK_HEADPHONE,
+		.debounce_time = 30,
+		.wake = true,
+	},
+};
+
+static int wm8994_en_pwr_amp(struct snd_soc_dapm_widget *w,
+	struct snd_kcontrol *k, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+
+	if( SND_SOC_DAPM_EVENT_ON(event) ){
+		snd_soc_write(codec, WM8994_GPIO_1, 0x41);
+	}
+	else{
+		snd_soc_write(codec, WM8994_GPIO_1, 0x1);
+	}
+	return 0;
+}
+
+#if defined(CONFIG_MACH_TENDERLOIN)
+static const struct snd_soc_dapm_widget tenderloin_dapm_widgets[] = {
+	SND_SOC_DAPM_HP("Headphone", NULL),
+	SND_SOC_DAPM_MIC("Headset Mic", NULL),
+	SND_SOC_DAPM_MIC("Internal Mic", NULL),
+	SND_SOC_DAPM_SPK("Speaker",wm8994_en_pwr_amp),
+};
+
+static struct snd_soc_dapm_route tenderloin_dapm_routes[] = {
+	{ "Headphone", 	NULL, "HPOUT1L" },
+	{ "Headphone", 	NULL, "HPOUT1R" },
+
+	{ "Speaker", 	NULL, "LINEOUT1P" },
+	{ "Speaker", 	NULL, "LINEOUT1N" },
+	{ "Speaker", 	NULL, "LINEOUT2P" },
+	{ "Speaker", 	NULL, "LINEOUT2N" },
+
+	// Internal Mic
+	{ "IN1LN",   NULL, "MICBIAS1" },
+        { "MICBIAS1",   NULL, "Internal Mic" },
+	// Headset Mic
+	{ "IN2LN", 		NULL, "MICBIAS2" },
+	{ "MICBIAS2", 	NULL, "Headset Mic" },
+
+};
+
+#endif
+
+#if 1 // TODO -JCS LATER
+static int jack_notifier_event(struct notifier_block *nb, unsigned long event, void *data)
+{
+	struct snd_soc_codec *codec;
+	struct wm8994_priv *wm8994;
+	struct snd_soc_jack *jack;
+
+	// Force enable will keep the MICBISA on, even when we stop reording
+	jack = data;
+
+	if(jack)
+	{
+		codec = jack->codec;
+		wm8994 = snd_soc_codec_get_drvdata(codec);
+
+		if(1 == event){
+			// Someone inserted a jack, we need to turn on mic bias2 for headset mic detection
+			snd_soc_dapm_force_enable_pin( &codec->dapm, "MICBIAS2");
+
+			pr_crit("MIC DETECT: ENABLE. Jack inserted\n");
+			// This will enable mic detection on 8958
+			wm8958_mic_detect( codec, &hp_jack, NULL, NULL);
+
+		}else if (0 == event){
+			headphone_plugged = 0;
+			if (headphone_switch) {
+				switch_set_state(headphone_switch, headphone_plugged);
+			}
+			pr_crit("MIC DETECT: DISABLE. Jack removed\n");
+
+			// This will disable mic detection on 8958
+			wm8958_mic_detect( codec, NULL, NULL, NULL);
+
+			if( wm8994->pdata->jack_is_mic) {
+				dev_err(codec->dev, "  Reporting headset removed\n");
+				wm8994->pdata->jack_is_mic = false;
+				wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
+				input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
+							    SW_MICROPHONE_INSERT,
+						        0);
+			} else {
+				dev_err(codec->dev, "  Reporting headphone removed\n");
+				input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
+								    SW_HEADPHONE_INSERT,
+							        0);
+			}
+
+			input_sync(jack->jack->input_dev);
+			snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
+		}
+	}
+
+	return 0;
+}
+
+static ssize_t headphone_switch_print_name(struct switch_dev *sdev, char *buf)
+{
+	bool plugged = switch_get_state(sdev) != 0;
+	return sprintf(buf, plugged ? "Headphone\n" : "None\n");
+}
+#endif
+
+static int msm_soc_dai_init(
+	struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_codec *codec = rtd->codec;
+	int ret = 0;
+	struct snd_soc_card *card = codec->card;
+	struct wm8994_priv *wm8994;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+	struct snd_soc_pcm_runtime *rt;
+
+	init_waitqueue_head(&the_locks.enable_wait);
+	init_waitqueue_head(&the_locks.eos_wait);
+	init_waitqueue_head(&the_locks.write_wait);
+	init_waitqueue_head(&the_locks.read_wait);
+	memset(&session_route, DEVICE_IGNORE, sizeof(struct pcm_session));
+
+	ret = msm_new_mixer(codec);
+	if (ret < 0)
+		pr_err("%s: ALSA MSM Mixer Fail\n", __func__);
+
+	wm8994_add_controls(codec);
+
+	// permanently disable pins
+	snd_soc_dapm_nc_pin(dapm, "SPKOUTRN");
+	snd_soc_dapm_nc_pin(dapm, "SPKOUTRP");
+	snd_soc_dapm_nc_pin(dapm, "SPKOUTLN");
+	snd_soc_dapm_nc_pin(dapm, "SPKOUTLP");
+	snd_soc_dapm_nc_pin(dapm, "HPOUT2P");
+	snd_soc_dapm_nc_pin(dapm, "HPOUT2N");
+	snd_soc_dapm_nc_pin(dapm, "IN2RP:VXRP");
+	snd_soc_dapm_nc_pin(dapm, "IN2RN");
+	snd_soc_dapm_nc_pin(dapm, "IN2LN");
+	snd_soc_dapm_nc_pin(dapm, "IN1RN");
+	snd_soc_dapm_nc_pin(dapm, "IN1RP");
+	snd_soc_dapm_nc_pin(dapm, "IN1LN");
+
+#if defined(CONFIG_MACH_TENDERLOIN)
+	snd_soc_dapm_new_controls(dapm, tenderloin_dapm_widgets,
+				ARRAY_SIZE(tenderloin_dapm_widgets));
+
+	snd_soc_dapm_add_routes(dapm, tenderloin_dapm_routes,
+				ARRAY_SIZE(tenderloin_dapm_routes));
+#endif
+
+#if 1 // TODO -JCS LATER
+	// Initially clock from MCLK1 - we will switch over to the FLLs
+	// once we start playing audio but don't have BCLK yet to boot
+	// them.
+
+	rt = snd_soc_get_pcm_runtime(card, "Playback");
+	ret = snd_soc_dai_set_sysclk(rt->codec_dai, WM8994_SYSCLK_MCLK1,
+					WM_FLL, 0);
+	if (ret != 0) {
+		pr_err("Failed to set DAI sysclk: %d\n", ret);
+		return ret;
+	}
+	rt = snd_soc_get_pcm_runtime(card, "Record");
+	ret = snd_soc_dai_set_sysclk(rt->codec_dai, WM8994_SYSCLK_MCLK1,
+					WM_FLL, 0);
+	if (ret != 0) {
+		pr_err("Failed to set DAI sysclk: %d\n", ret);
+		return ret;
+	}
+#endif
+
+#if 1 // TODO -JCS LATER
+	/* Headphone jack detection */
+	// If we have the HeadSet uart (hs_uart) then we DONT want to detect headphones
+	if ( hs_uart == 1 ) {
+		snd_soc_jack_new(codec, "headset", SND_JACK_MICROPHONE | SND_JACK_BTN_0, &hp_jack);
+	} else {
+		snd_soc_jack_new(codec, "headset", SND_JACK_HEADPHONE | SND_JACK_MICROPHONE | SND_JACK_BTN_0, &hp_jack);
+	}
+	snd_soc_jack_add_pins(&hp_jack, ARRAY_SIZE(hp_jack_pins),hp_jack_pins);
+	snd_jack_set_key(hp_jack.jack, SND_JACK_BTN_0, KEY_PLAYPAUSE); // mapping button 0 to KEY_PLAYPUASE
+
+	// Register a notifier with snd_soc_jack
+	jack_notifier.notifier_call = jack_notifier_event;
+
+	snd_soc_jack_notifier_register(&hp_jack, &jack_notifier);
+
+	ret = snd_soc_jack_add_gpios(&hp_jack, ARRAY_SIZE(hp_jack_gpios), hp_jack_gpios);
+
+	wm8994 = snd_soc_codec_get_drvdata(codec);
+
+	if(wm8994)
+		wm8994->soc_jack = &hp_jack;
+
+	// add headphone switch
+	headphone_switch = kzalloc(sizeof(struct switch_dev), GFP_KERNEL);
+	if (headphone_switch) {
+		headphone_switch->name = "h2w";
+		headphone_switch->print_name = headphone_switch_print_name;
+
+		ret = switch_dev_register(headphone_switch);
+		if (ret < 0) {
+			printk(KERN_ERR "Unable to register headphone switch\n");
+			kfree(headphone_switch);
+			headphone_switch = NULL;
+		} else {
+			headphone_plugged = hp_jack.status ? 1 : 0;
+			printk(KERN_INFO "Headphone switch initialized, plugged=%d\n",
+					headphone_plugged);
+			switch_set_state(headphone_switch, headphone_plugged);
+		}
+	} else {
+		printk(KERN_ERR "Unable to allocate headphone switch\n");
+	}
+#endif
+
+   return ret;
+}
+
+static int tendorloin_hw_params(struct snd_pcm_substream *substream,
+                           struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	int ret;
+
+	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_CBS_CFS |
+		SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF);
+
+	if (ret != 0) {
+		pr_err("Failed to set DAI format: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+
+
+static struct snd_soc_ops tenderloin_ops = {
+	.hw_params = tendorloin_hw_params,
+};
+
+
+static struct snd_soc_dai_link msm_dai[] = {
+{
+	.name = "Playback",
+	.stream_name = "AIF1",
+	.cpu_dai_name = "msm-cpu-dai.0",
+	.platform_name = "msm-dsp-audio.0",
+	.codec_name = "wm8994-codec",
+	.codec_dai_name = "wm8994-aif1",
+	.init   = msm_soc_dai_init,
+	.ops = &tenderloin_ops,
+},
+{
+	.name = "Record",
+	.stream_name = "AIF2",
+	.cpu_dai_name = "msm-cpu-dai.0",
+	.platform_name = "msm-dsp-audio.0",
+	.codec_name = "wm8994-codec",
+	.codec_dai_name = "wm8994-aif2",
+	.ops = &tenderloin_ops,
+},
+};
+
+
+struct snd_soc_card snd_soc_card_msm = {
+	.name = "msm-audio",
+	.dai_link = msm_dai,
+	.num_links = ARRAY_SIZE(msm_dai),
+};
+
+#else
 
 static int msm_soc_dai_init(
 	struct snd_soc_pcm_runtime *rtd)
@@ -1373,11 +1796,21 @@ static struct snd_soc_dai_link msm_dai[] = {
 #endif
 };
 
+static struct snd_soc_aux_dev msm_aux[] = {
+{
+	.name	= "wm8994-codec",
+	.codec_name = "wm8994-codec",
+},
+};
+
 static struct snd_soc_card snd_soc_card_msm = {
 	.name		= "msm-audio",
 	.dai_link	= msm_dai,
 	.num_links = ARRAY_SIZE(msm_dai),
+	.aux_dev	= msm_aux,
+	.num_aux_devs = ARRAY_SIZE(msm_aux),
 };
+#endif
 
 static int __init msm_audio_init(void)
 {

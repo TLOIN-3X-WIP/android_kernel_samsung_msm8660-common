@@ -135,11 +135,24 @@ struct wm8994_priv {
 	unsigned int aif1clk_disable:1;
 	unsigned int aif2clk_disable:1;
 
+	unsigned int force_route:1;
+	unsigned int suspended:1;
+
 	int dsp_active;
 	const struct firmware *cur_fw;
 	const struct firmware *mbc;
 	const struct firmware *mbc_vss;
 	const struct firmware *enh_eq;
+
+	struct snd_soc_jack	*soc_jack;
+	// bool suspended;
+	bool defer_mic_det;
 };
+
+int wm8994_hw_params(struct snd_pcm_substream *substream,
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai);
+
+int wm8994_add_controls(struct snd_soc_codec *codec);
 
 #endif

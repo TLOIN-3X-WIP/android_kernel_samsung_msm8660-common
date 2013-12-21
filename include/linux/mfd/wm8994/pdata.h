@@ -167,6 +167,12 @@ struct wm8994_pdata {
 
 	/* WM8958 microphone bias configuration */
 	int micbias[2];
+
+	unsigned int (*wm8994_setup)(void);
+	void (*wm8994_shutdown)(void);
+
+	unsigned int force_route:1; // TODO -JCS ?
+	unsigned int jack_is_mic:1; // TODO -JCS ?
 };
 
 #endif

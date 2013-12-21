@@ -26,6 +26,8 @@
 #include <linux/mfd/wm8994/pdata.h>
 #include <linux/mfd/wm8994/registers.h>
 
+extern int wm8994_ldo_power(int enable);
+
 static int wm8994_read(struct wm8994 *wm8994, unsigned short reg,
 		       int bytes, void *dest)
 {
@@ -83,6 +85,10 @@ int wm8994_bulk_read(struct wm8994 *wm8994, unsigned short reg,
 		     int count, u16 *buf)
 {
 	int ret;
+
+	if (count > 127) {
+		printk(KERN_WARNING "%s: WARNING: count>127\n", __func__);
+	}
 
 	mutex_lock(&wm8994->io_lock);
 
@@ -147,6 +153,10 @@ int wm8994_bulk_write(struct wm8994 *wm8994, unsigned short reg,
 		      int count, const u16 *buf)
 {
 	int ret;
+
+	if (count > 127) {
+		printk(KERN_WARNING "%s: WARNING: count>127\n", __func__);
+	}
 
 	mutex_lock(&wm8994->io_lock);
 
@@ -253,6 +263,14 @@ static const char *wm8994_main_supplies[] = {
 	"SPKVDD2",
 };
 
+#ifdef CONFIG_MACH_TENDERLOIN
+static const char *wm8958_main_supplies[] = {
+	"8058_s3",
+};
+static const int wm8958_main_supplies_v[] = {
+	1800000,
+};
+#else
 static const char *wm8958_main_supplies[] = {
 	"DBVDD1",
 	"DBVDD2",
@@ -264,12 +282,16 @@ static const char *wm8958_main_supplies[] = {
 	"SPKVDD1",
 	"SPKVDD2",
 };
+#endif
 
 #ifdef CONFIG_PM
 static int wm8994_suspend(struct device *dev)
 {
 	struct wm8994 *wm8994 = dev_get_drvdata(dev);
+	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	int ret;
+
+	return 0;
 
 	/* Don't actually go through with the suspend if the CODEC is
 	 * still active (eg, for audio passthrough from CP. */
@@ -299,16 +321,21 @@ static int wm8994_suspend(struct device *dev)
 	/* Explicitly put the device into reset in case regulators
 	 * don't get disabled in order to ensure consistent restart.
 	 */
-	wm8994_reg_write(wm8994, WM8994_SOFTWARE_RESET, 0x8994);
+	// wm8994_reg_write(wm8994, WM8994_SOFTWARE_RESET, 0x8994);
 
 	wm8994->suspended = true;
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	ret = regulator_bulk_disable(wm8994->num_supplies,
 				     wm8994->supplies);
 	if (ret != 0) {
 		dev_err(dev, "Failed to disable supplies: %d\n", ret);
 		return ret;
 	}
+#else
+	if (pdata->wm8994_shutdown && !pdata->jack_is_mic)
+		pdata->wm8994_shutdown();
+#endif
 
 	return 0;
 }
@@ -316,18 +343,24 @@ static int wm8994_suspend(struct device *dev)
 static int wm8994_resume(struct device *dev)
 {
 	struct wm8994 *wm8994 = dev_get_drvdata(dev);
+	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	int ret;
 
 	/* We may have lied to the PM core about suspending */
 	if (!wm8994->suspended)
 		return 0;
 
+#ifndef CONFIG_MACH_TENDERLOIN
 	ret = regulator_bulk_enable(wm8994->num_supplies,
 				    wm8994->supplies);
 	if (ret != 0) {
 		dev_err(dev, "Failed to enable supplies: %d\n", ret);
 		return ret;
 	}
+#else
+	if (pdata->wm8994_setup && !pdata->jack_is_mic)
+		pdata->wm8994_setup();
+#endif
 
 	ret = wm8994_write(wm8994, WM8994_INTERRUPT_STATUS_1_MASK,
 			   WM8994_NUM_IRQ_REGS * 2, &wm8994->irq_masks_cur);
@@ -394,6 +427,11 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 		goto err;
 	}
 
+    if ((pdata)&&(pdata->wm8994_setup))
+		pdata->wm8994_setup();
+
+	wm8994->type = WM8958; // TODO - XXX - -JCS
+
 	switch (wm8994->type) {
 	case WM8994:
 		wm8994->num_supplies = ARRAY_SIZE(wm8994_main_supplies);
@@ -420,19 +458,30 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 			wm8994->supplies[i].supply = wm8994_main_supplies[i];
 		break;
 	case WM8958:
-		for (i = 0; i < ARRAY_SIZE(wm8958_main_supplies); i++)
+		for (i = 0; i < ARRAY_SIZE(wm8958_main_supplies); i++) {
 			wm8994->supplies[i].supply = wm8958_main_supplies[i];
+			wm8994->supplies[i].min_uV = wm8958_main_supplies_v[i];
+			wm8994->supplies[i].max_uV = wm8958_main_supplies_v[i];
+		}
 		break;
 	default:
 		BUG();
 		return -EINVAL;
 	}
 		
+#ifndef CONFIG_MACH_TENDERLOIN
 	ret = regulator_bulk_get(wm8994->dev, wm8994->num_supplies,
 				 wm8994->supplies);
 	if (ret != 0) {
 		dev_err(wm8994->dev, "Failed to get supplies: %d\n", ret);
 		goto err_supplies;
+	}
+
+	ret = regulator_bulk_set_voltage(wm8994->num_supplies,
+				    wm8994->supplies);
+	if (ret != 0) {
+		dev_err(wm8994->dev, "Failed to set voltage on supplies: %d\n", ret);
+		goto err_get;
 	}
 
 	ret = regulator_bulk_enable(wm8994->num_supplies,
@@ -441,6 +490,10 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 		dev_err(wm8994->dev, "Failed to enable supplies: %d\n", ret);
 		goto err_get;
 	}
+#else
+	// wm8994_ldo_power(1);
+	// mdelay(30);
+#endif
 
 	ret = wm8994_reg_read(wm8994, WM8994_SOFTWARE_RESET);
 	if (ret < 0) {
@@ -537,8 +590,13 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 err_irq:
 	wm8994_irq_exit(wm8994);
 err_enable:
+#ifndef CONFIG_MACH_TENDERLOIN
 	regulator_bulk_disable(wm8994->num_supplies,
 			       wm8994->supplies);
+#else
+	if ((pdata)&&(pdata->wm8994_shutdown))
+		pdata->wm8994_shutdown();
+#endif
 err_get:
 	regulator_bulk_free(wm8994->num_supplies, wm8994->supplies);
 err_supplies:
@@ -551,6 +609,7 @@ err:
 
 static void wm8994_device_exit(struct wm8994 *wm8994)
 {
+	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	pm_runtime_disable(wm8994->dev);
 	mfd_remove_devices(wm8994->dev);
 	wm8994_irq_exit(wm8994);
@@ -558,6 +617,8 @@ static void wm8994_device_exit(struct wm8994 *wm8994)
 			       wm8994->supplies);
 	regulator_bulk_free(wm8994->num_supplies, wm8994->supplies);
 	kfree(wm8994->supplies);
+	if ((pdata)&&(pdata->wm8994_shutdown))
+		pdata->wm8994_shutdown();
 	kfree(wm8994);
 }
 
@@ -625,7 +686,11 @@ static int wm8994_i2c_probe(struct i2c_client *i2c,
 	wm8994->read_dev = wm8994_i2c_read_device;
 	wm8994->write_dev = wm8994_i2c_write_device;
 	wm8994->irq = i2c->irq;
+#ifndef CONFIG_MACH_TENDERLOIN
 	wm8994->type = id->driver_data;
+#else
+	wm8994->type = WM8958;
+#endif
 
 	return wm8994_device_init(wm8994, i2c->irq);
 }
