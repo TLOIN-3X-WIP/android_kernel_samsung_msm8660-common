@@ -12069,7 +12069,9 @@ static struct msm_bus_scale_pdata dtv_bus_scale_pdata = {
 
 static struct lcdc_platform_data dtv_pdata = {
 	.bus_scale_table = &dtv_bus_scale_pdata,
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	.lcdc_power_save = hdmi_panel_power,
+#endif
 };
 
 static struct msm_bus_paths dtv_hdmi_prim_bus_scale_usecases[] = {
