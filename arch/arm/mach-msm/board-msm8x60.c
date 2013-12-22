@@ -10094,7 +10094,10 @@ static void tenderloin_probe_wifi(int id, struct mmc_host *mmc)
 	printk("%s: id %d mmc %p\n", __PRETTY_FUNCTION__, id, mmc);
 	wifi_mmc = mmc;
 
+#if 0
+	// disable for now - TODO
 	board_sdio_wifi_enable(0);
+#endif
 }
 
 static void tenderloin_remove_wifi(int id, struct mmc_host *mmc)
@@ -10102,7 +10105,10 @@ static void tenderloin_remove_wifi(int id, struct mmc_host *mmc)
 	printk("%s: id %d mmc %p\n", __PRETTY_FUNCTION__, id, mmc);
 	wifi_mmc = NULL;
 
+#if 0
+	// disable for now - TODO
 	board_sdio_wifi_disable(0);
+#endif
 }
 
 /*
