@@ -13,7 +13,7 @@
 #define __Q6_ASM_H__
 
 #ifndef USE_ION_AUDIO
-#define USE_ION_AUDIO 0
+#define USE_ION_AUDIO 1
 #endif
 
 #include <mach/qdsp6v2/apr.h>

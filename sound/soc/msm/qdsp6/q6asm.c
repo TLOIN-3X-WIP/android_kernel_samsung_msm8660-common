@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-#define USE_ION_AUDIO 0
+#define USE_ION_AUDIO 1
 #include <linux/fs.h>
 #include <linux/mutex.h>
 #include <linux/wait.h>
