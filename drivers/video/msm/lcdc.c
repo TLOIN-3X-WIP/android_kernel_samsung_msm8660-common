@@ -71,12 +71,26 @@ static int lcdc_off(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd;
+	static int first_run = 1;
 
 	mfd = platform_get_drvdata(pdev);
 	ret = panel_next_off(pdev);
 
+	printk(KERN_ERR "%s: CALLED\n", __func__);
+
 	clk_disable_unprepare(pixel_mdp_clk);
 	clk_disable_unprepare(pixel_lcdc_clk);
+
+	if (first_run) {
+		if (first_run == 1) {
+			printk("%s: first_run\n", __func__);
+			clk_disable_unprepare(pixel_mdp_clk);
+			clk_disable_unprepare(pixel_lcdc_clk);
+			first_run = 0;
+		} else {
+			first_run--;
+		}
+	}
 
 	if (lcdc_pdata && lcdc_pdata->lcdc_power_save)
 		lcdc_pdata->lcdc_power_save(0);

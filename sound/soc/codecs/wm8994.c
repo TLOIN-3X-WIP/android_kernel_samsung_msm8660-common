@@ -1909,6 +1909,8 @@ static int wm8994_set_bias_level(struct snd_soc_codec *codec,
 
 	case SND_SOC_BIAS_STANDBY:
 		if (codec->dapm.bias_level == SND_SOC_BIAS_OFF) {
+
+			printk(KERN_ERR "%s: XMARK 1\n", __func__);
 			pm_runtime_get_sync(codec->dev);
 
 			switch (control->type) {
@@ -2007,6 +2009,7 @@ static int wm8994_set_bias_level(struct snd_soc_codec *codec,
 
 			wm8994->cur_fw = NULL;
 
+			printk(KERN_ERR "%s: XMARK 2\n", __func__);
 			pm_runtime_put(codec->dev);
 		}
 		break;
@@ -2524,6 +2527,8 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 
+	printk(KERN_ERR "%s: CALLEDIT\n", __func__);
+
 	switch (control->type) {
 	case WM8994:
 		snd_soc_update_bits(codec, WM8994_MICBIAS, WM8994_MICD_ENA, 0);
@@ -2555,6 +2560,8 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 	unsigned int val, mask;
+
+	printk(KERN_ERR "%s: CALLEDIT\n", __func__);
 
 	if (wm8994->revision < 4) {
 		/* force a HW read */
@@ -2978,8 +2985,11 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 		wm8994->micdet_irq = wm8994->pdata->irq_base +
 				     WM8994_IRQ_MIC1_DET;
 
+	printk(KERN_ERR "%s: XMARKA\n", __func__);
 	pm_runtime_enable(codec->dev);
+	printk(KERN_ERR "%s: XMARKB\n", __func__);
 	pm_runtime_resume(codec->dev);
+	printk(KERN_ERR "%s: XMARKC\n", __func__);
 
 	/* Read our current status back from the chip - we don't want to
 	 * reset as this may interfere with the GPIO or LDO operation. */
@@ -3308,6 +3318,7 @@ static int  wm8994_codec_remove(struct snd_soc_codec *codec)
 
 	wm8994_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
+	printk(KERN_ERR "%s: XMARK 0\n", __func__);
 	pm_runtime_disable(codec->dev);
 
 	switch (control->type) {

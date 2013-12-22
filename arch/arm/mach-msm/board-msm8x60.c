@@ -3869,6 +3869,8 @@ static void board_cy8ctma395_vdd_enable(int enable)
 	static struct regulator *tp_l10 = NULL;
 	static int isPowerOn = 0;
 
+	printk(KERN_ERR "%s: enable=%d isPowerOn=%d\n", __func__, enable, isPowerOn);
+
 	if (!tp_l10) {
 		tp_l10 = regulator_get(NULL, "8058_l10");
 		if (IS_ERR(tp_l10)) {
@@ -3941,7 +3943,7 @@ static struct cy8ctma395_platform_data board_cy8ctma395_data = {
 	.swdio_request = board_cy8ctma395_swdio_request,
 	.vdd_enable = board_cy8ctma395_vdd_enable,
 	.xres = GPIO_CY8CTMA395_XRES,
-	.xres_us = 1000,
+	.xres_us = 500,
 	.swdck = GPIO_CTP_SCL,
 	.swdio = GPIO_CTP_SDA,
 	.swd_wait_retries = 0,
@@ -5171,6 +5173,8 @@ static int tma340_power(int vreg_on)
 
 static struct kobject *tma340_prop_kobj;
 
+#if defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C) || \
+		defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C_MODULE)
 static int tma340_dragon_dev_setup(bool enable)
 {
 	int rc;
@@ -5246,6 +5250,7 @@ static struct i2c_board_info cy8ctma340_dragon_board_info[] = {
 		.platform_data = &cy8ctma340_dragon_pdata,
 	}
 };
+#endif
 
 #ifdef CONFIG_SERIAL_MSM_HS
 static int configure_uart_gpios(int on)
@@ -8550,6 +8555,7 @@ int wm8994_ldo_power(int enable)
 #endif
 EXPORT_SYMBOL(wm8994_ldo_power);
 
+static int wm8958_powered = 0;
 static struct regulator *vreg_wm8958;
 static unsigned int msm_wm8958_setup_power(void)
 {
@@ -8557,6 +8563,7 @@ static unsigned int msm_wm8958_setup_power(void)
 		int rc=0;
 
 		pr_err("%s: codec power setup\n", __func__);
+		if (wm8958_powered) return 0;
 
 		if (!tp_5v0) {
 			tp_5v0 = regulator_get(NULL, "vdd50_boost");
@@ -8593,6 +8600,7 @@ static unsigned int msm_wm8958_setup_power(void)
 		}
 		wm8994_ldo_power(1);
 		mdelay(30);
+		wm8958_powered = 1;
 		return rc;
 }
 
@@ -8603,6 +8611,8 @@ static void msm_wm8958_shutdown_power(void)
 		int rc;
 
 		pr_err("%s: codec power shutdown\n", __func__);
+
+		if (!wm8958_powered) return;
 
 		if (!tp_5v0) {
 			tp_5v0 = regulator_get(NULL, "vdd50_boost");
@@ -8626,6 +8636,7 @@ static void msm_wm8958_shutdown_power(void)
 				pr_err("%s: Disable regulator 8058_s3 failed\n", __func__);
 
 		regulator_put(vreg_wm8958);
+		wm8958_powered = 0;
 #else
 		pr_err("%s: codec power shutdown - NOPE\n", __func__);
 		return;
@@ -9310,12 +9321,15 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		cy8ctmg200_board_info,
 		ARRAY_SIZE(cy8ctmg200_board_info),
 	},
+#if defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C) || \
+		defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C_MODULE)
 	{
 		I2C_DRAGON,
 		MSM_GSBI3_QUP_I2C_BUS_ID,
 		cy8ctma340_dragon_board_info,
 		ARRAY_SIZE(cy8ctma340_dragon_board_info),
 	},
+#endif
 #if defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C) || \
 		defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C_MODULE)
 	{
@@ -11563,6 +11577,11 @@ static struct regulator *votg_vdd5v = NULL;
 static int lcdc_common_panel_power(int on)
 {
 	int rc;
+	static int isOn = 0;
+
+	printk(KERN_ERR "%s: on=%d isOn=%d\n", __func__, on, isOn);
+
+	if (on == isOn) return 0;
 
 	/* VDD_LVDS_3.3V*/
 	if(!votg_l10)
@@ -11684,6 +11703,7 @@ static int lcdc_common_panel_power(int on)
 	}
 
 	lcdc_gpio_request(on);
+	isOn = on;
 	return 0;
 }
 #undef _GET_REGULATOR

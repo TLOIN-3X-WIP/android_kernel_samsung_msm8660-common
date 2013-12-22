@@ -290,6 +290,16 @@ static int wm8994_suspend(struct device *dev)
 	struct wm8994 *wm8994 = dev_get_drvdata(dev);
 	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	int ret;
+	static int ignore_check = 2;
+
+	printk(KERN_ERR "%s: CALLED/IGNORED\n", __func__);
+	return 0; // -JCS
+	
+	if (ignore_check) {
+		ignore_check--;
+		printk(KERN_ERR "%s: IGNORED\n", __func__);
+		return 0;
+	}
 
 	/* Don't actually go through with the suspend if the CODEC is
 	 * still active (eg, for audio passthrough from CP. */
@@ -319,7 +329,7 @@ static int wm8994_suspend(struct device *dev)
 	/* Explicitly put the device into reset in case regulators
 	 * don't get disabled in order to ensure consistent restart.
 	 */
-	// wm8994_reg_write(wm8994, WM8994_SOFTWARE_RESET, 0x8994);
+	wm8994_reg_write(wm8994, WM8994_SOFTWARE_RESET, 0x8994);
 
 	wm8994->suspended = true;
 
@@ -343,6 +353,8 @@ static int wm8994_resume(struct device *dev)
 	struct wm8994 *wm8994 = dev_get_drvdata(dev);
 	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	int ret;
+
+	printk(KERN_ERR "%s: CALLED\n", __func__);
 
 	/* We may have lied to the PM core about suspending */
 	if (!wm8994->suspended)
