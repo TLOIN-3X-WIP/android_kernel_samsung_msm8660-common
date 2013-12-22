@@ -4020,7 +4020,41 @@ err_gpioconfig:
 #endif /* CONFIG_TOUCHSCREEN_CY8CTMA395[_MODULE] */
 
 #ifdef CONFIG_USER_PINS
+
+static struct user_pin bt_pins[] = {
+	{
+		.name       =  "reset",
+		.gpio       =  BT_RST_N,
+		.act_level  =  0, // active low
+		.direction  =  0, // output
+		.def_level  =  0, // low
+		.pin_mode   =  (void *)-1,// undefined
+		.sysfs_mask =  0777,
+		.options    =  0,
+		.irq_handler = NULL,
+		.irq_config =  0,
+	},
+	{
+		.name       =  "host_wake",
+		.gpio       =  BT_HOST_WAKE,
+		.act_level  =  1,  // active high
+		.direction  =  1,  // input
+		.def_level  = -1,  // undefined
+		.pin_mode   =  (void *)-1, // undefined
+		.sysfs_mask =  0777,
+		.options    =  PIN_IRQ | PIN_WAKEUP_SOURCE,
+		.irq_handler = NULL,
+		.irq_config = IRQF_TRIGGER_RISING,
+		.irq_handle_mode = IRQ_HANDLE_AUTO
+	},
+};
+
 static struct user_pin_set  board_user_pins_sets[] = {
+	{
+		.set_name = "bt",
+		.num_pins = ARRAY_SIZE(bt_pins),
+		.pins     = bt_pins,
+	},
 #if defined (CONFIG_TOUCHSCREEN_CY8CTMA395) \
 	|| defined (CONFIG_TOUCHSCREEN_CY8CTMA395_MODULE)
 	{
