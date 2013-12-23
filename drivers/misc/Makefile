@@ -82,7 +82,7 @@ ifeq ($(CONFIG_SENSORS_CORE),y)
 EXTRA_CFLAGS += -DSENSORS_LOG_DUMP
 endif
 obj-$(CONFIG_KERNEL_LOG)	+= klog.o
-obj-$(CONFIG_HSUART)		+= hsuart.o
+obj-$(CONFIG_HSUART)		+= hsuart.o hsuart_tty.o
 obj-$(CONFIG_USER_PINS)         += user-pins.o
 obj-$(CONFIG_HRES_COUNTER)	+= hres_counter.o
 obj-$(CONFIG_A6)		+= a6/

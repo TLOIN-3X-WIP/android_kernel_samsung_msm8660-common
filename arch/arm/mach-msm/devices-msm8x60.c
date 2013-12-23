@@ -247,6 +247,12 @@ static struct resource msm_uart1_dm_resources[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	{
+		.start = TCSR_BASE_PHYS,
+		.end   = TCSR_BASE_PHYS + 0x80 - 1,
+		.name  = "tcsr_resource",
+		.flags = IORESOURCE_MEM,
+	},
+	{
 		.start = DMOV_HSUART1_TX_CHAN,
 		.end   = DMOV_HSUART1_RX_CHAN,
 		.name  = "uartdm_channels",
@@ -263,7 +269,7 @@ static struct resource msm_uart1_dm_resources[] = {
 static u64 msm_uart_dm1_dma_mask = DMA_BIT_MASK(32);
 
 struct platform_device msm_device_uart_dm1 = {
-	.name = "msm_serial_hs",
+	.name = "msm_uartdm",
 	.id = 0,
 	.num_resources = ARRAY_SIZE(msm_uart1_dm_resources),
 	.resource = msm_uart1_dm_resources,

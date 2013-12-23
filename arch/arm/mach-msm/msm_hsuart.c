@@ -678,6 +678,10 @@ __msm_hsuart_write_worker(struct work_struct* io_p_work)
 
 	int tx_state ;
 
+	#if MSM_HSUART_FEATURE_PRINT_TX_DATA
+	int byte_cnt = p_buffer->fullness;
+	#endif
+
 	MSM_HSUART_ENTER();
 
 	p_wr_worker = container_of(io_p_work, struct hsuart_worker, worker);
@@ -757,7 +761,6 @@ __msm_hsuart_write_worker(struct work_struct* io_p_work)
 			{
 				printk(KERN_ERR"fullness %d\n",p_buffer->fullness);
 				printk(KERN_ERR"============\n");
-				int byte_cnt = p_buffer->fullness;
 			//		for (;byte_cnt;byte_cnt--){
 			//			int shift = 8 * (byte_cnt-1);
 			//			printk(KERN_ERR"data: is %c\n", (data >> shift) & 0xFF);
@@ -1145,7 +1148,7 @@ __msm_hsuart_read_dm_worker(struct work_struct* io_p_work)
 				 */
 				if ( ((unsigned int)p_context->p_rx_buffer & 0xFFFFFFFC) != (unsigned int)p_context->p_rx_buffer){
 					MSM_HSUART_ERR("rx buffer is not word aligned 0x%x, fixing to 0x%x\n",
-						p_context->p_rx_buffer,
+						(unsigned int)p_context->p_rx_buffer,
 						(unsigned int)p_context->p_rx_buffer & 0xFFFFFFFC);
 					p_context->p_rx_buffer = (struct buffer_item*)(((unsigned int)p_context->p_rx_buffer) & 0xFFFFFFFC);
 				}
@@ -1164,7 +1167,7 @@ __msm_hsuart_read_dm_worker(struct work_struct* io_p_work)
 	}
 
 	MSM_HSUART_EXIT();
-//	hsuart_tty_flip();
+	hsuart_tty_flip(); // -JCS re-enabled for BT
 }
 
 static int __msm_hsuart_suspend(struct hsuart_context* p_context)

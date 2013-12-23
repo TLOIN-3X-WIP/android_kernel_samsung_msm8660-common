@@ -3702,6 +3702,13 @@ exit:
 	return (rc);
 }
 
+static int board_gsbi6_init(void)
+{
+	static int inited = 0;
+
+	return (board_gsbi_init(6, &inited, UART_WITH_FLOW_CONTROL));
+}
+
 static int board_gsbi10_init(void)
 {
 	static int inited = 0;
@@ -4078,6 +4085,13 @@ static struct platform_device board_user_pins_device = {
 	.dev  = {
 		.platform_data  = &board_user_pins_pdata,
 	}
+};
+#endif
+
+#ifdef CONFIG_MACH_TENDERLOIN
+static struct platform_device tenderloin_rfkill = {
+	.name = "tenderloin_rfkill",
+	.id = -1,
 };
 #endif
 
@@ -5253,6 +5267,17 @@ static struct i2c_board_info cy8ctma340_dragon_board_info[] = {
 #endif
 
 #ifdef CONFIG_SERIAL_MSM_HS
+#ifdef CONFIG_MACH_TENDERLOIN
+static int configure_uart_gpios(int on)
+{
+	int ret = 0;
+	int uart_gpios[] = {53, 54, 55, 56};
+
+	ret = configure_gpiomux_gpios(on, uart_gpios, ARRAY_SIZE(uart_gpios));
+
+	return ret;
+}
+#else
 static int configure_uart_gpios(int on)
 {
 	int ret = 0, i;
@@ -5273,12 +5298,86 @@ static int configure_uart_gpios(int on)
 			msm_gpiomux_put(uart_gpios[i]);
 	return ret;
 }
+#endif
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
        .gpio_config = configure_uart_gpios,
 };
 #endif
+
+
+#ifdef CONFIG_HSUART
+
+static int btuart_pin_mux(int on)
+{
+	int ret = 0;
+	int gpios[] = {UART1DM_CTS_GPIO, UART1DM_RX_GPIO, UART1DM_TX_GPIO};
+
+	printk(KERN_INFO "btuart_pin_mux: %s\n", on?"on":"off");
+
+	ret = configure_gpiomux_gpios(on, gpios, ARRAY_SIZE(gpios));
+
+	return ret;
+}
+
+static int btuart_deassert_rts(int deassert)
+{
+	int rc = 0;
+	static int active = 0;
+	printk(KERN_INFO "btuart_deassert_rts: %d(%s)\n", deassert, deassert?"put":"get");
+	if (deassert) {
+		if (active) {
+			rc = msm_gpiomux_put(UART1DM_RTS_GPIO);
+			if (!rc)
+				active = 0;
+		}
+	} else {
+		if (!active) {
+			rc = msm_gpiomux_get(UART1DM_RTS_GPIO);
+			if (!rc)
+				active = 1;
+		}
+	}
+
+	return rc;
+}
+
+
+/*
+ * BT High speed UART interface
+ */
+static struct hsuart_platform_data btuart_data = {
+	.dev_name   = "ttyHS0",
+	.uart_mode  = HSUART_MODE_FLOW_CTRL_NONE | HSUART_MODE_PARITY_NONE,
+	.uart_speed = HSUART_SPEED_115K,
+	.options    = HSUART_OPTION_DEFERRED_LOAD | HSUART_OPTION_TX_PIO | HSUART_OPTION_RX_DM ,
+
+	.tx_buf_size = 512,
+	.tx_buf_num  = 64,
+	.rx_buf_size = 512,
+	.rx_buf_num  = 64,
+	.max_packet_size = 450, // ~450
+	.min_packet_size = 6,   // min packet size
+	.rx_latency      = 10, // in bytes at current speed
+	.p_board_pin_mux_cb = btuart_pin_mux,
+	.p_board_config_gsbi_cb = board_gsbi6_init,
+	.p_board_rts_pin_deassert_cb = btuart_deassert_rts,
+//	.rts_pin         = 145,   // uart rts line pin
+};
+
+static u64 btuart_dmamask = ~(u32)0;
+static struct platform_device btuart_device = {
+	.name = "hsuart_tty",
+	.id   =  0, // configure UART2 as hi speed uart
+	.dev  = {
+		.dma_mask           = &btuart_dmamask,
+		.coherent_dma_mask  = 0xffffffff,
+		.platform_data      = &btuart_data,
+	}
+};
+
+#endif // CONFIG_HSUART
 
 #ifdef CONFIG_KEYBOARD_GPIO
 static struct gpio_keys_button topaz_wifi_gpio_keys_buttons[] = {
@@ -6987,7 +7086,10 @@ static struct platform_device *surf_devices[] __initdata = {
 #ifdef CONFIG_USER_PINS
 	&board_user_pins_device,
 #endif
+#ifdef CONFIG_MACH_TENDERLOIN
 	&tenderloin_fixed_reg_device[0],
+	&tenderloin_rfkill,
+#endif
 #if defined(CONFIG_MSM_RPM_STATS_LOG)
 	&msm_rpm_stat_device,
 #endif
@@ -7030,6 +7132,9 @@ static struct platform_device *surf_devices[] __initdata = {
 	&ion_dev,
 #endif
 	&msm8660_device_watchdog,
+#ifdef CONFIG_HSUART
+	&btuart_device,
+#endif
 #if defined (CONFIG_TOUCHSCREEN_CY8CTMA395) \
 	|| defined (CONFIG_TOUCHSCREEN_CY8CTMA395_MODULE)
 	&board_cy8ctma395_device,

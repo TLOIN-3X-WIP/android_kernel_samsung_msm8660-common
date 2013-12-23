@@ -531,6 +531,7 @@ msm_uartdm_clear_dm_error(struct generic_uart_port* i_p_port)
 	msm_write( i_p_port, UART_DM_DMEN_RX_DM_DIS, UART_DM_DMEN  );
 	__msm_uartdm_reset(i_p_port);
 
+	// -JCS re-enable for BT?
 //	msm_dmov_clear_error_condition(i_p_port->dma_rx_channel, i_p_port->dma_rx_crci);
 
 	msm_write( i_p_port,
@@ -1726,6 +1727,7 @@ __msm_uartdm_reset(struct generic_uart_port* i_p_port)
 }
 
 #if 0
+// -JCS re-enable for BT?
 static void
 msm_uartdm_reset(struct generic_uart_port* i_p_port)
 {

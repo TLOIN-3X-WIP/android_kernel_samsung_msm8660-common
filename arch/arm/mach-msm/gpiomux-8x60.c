@@ -15,6 +15,7 @@
 #include <mach/gpiomux.h>
 #include <linux/gpio.h>
 #include "gpiomux-8x60.h"
+#include "gpiomux-tenderloin.h"
 
 static struct gpiomux_setting console_uart = {
 	.func = GPIOMUX_FUNC_2,
@@ -227,10 +228,83 @@ static struct gpiomux_setting uart1dm_active = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+static struct gpiomux_setting uart1dm_out_active = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
 static struct gpiomux_setting uart1dm_suspended = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_DOWN,
+};
+
+static struct gpiomux_setting uart1dm_suspended_in_high = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,
+};
+
+static struct gpiomux_setting uart1dm_suspended_out_high = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting bt_rst_n_active_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting bt_rst_n_suspended_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting bt_power_active_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
+static struct gpiomux_setting bt_power_suspended_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_KEEPER,
+};
+
+static struct gpiomux_setting bt_wake_active_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
+static struct gpiomux_setting bt_wake_suspended_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
+static struct gpiomux_setting bt_host_wake_active_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_UP,
+};
+
+static struct gpiomux_setting bt_host_wake_suspended_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_UP,
 };
 
 static struct gpiomux_setting mi2s_active_cfg = {
@@ -1057,34 +1131,67 @@ static struct msm_gpiomux_config msm8x60_uart_configs[] __initdata = {
 	},
 };
 
+
+static struct msm_gpiomux_config tenderloin_bt_configs[] __initdata = {
+	{
+		.gpio      = BT_RST_N,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_rst_n_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_rst_n_suspended_cfg,
+		},
+	},
+	{
+		.gpio      = BT_POWER,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_power_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_power_suspended_cfg,
+		},
+	},
+	{
+		.gpio      = BT_WAKE,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_wake_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_wake_suspended_cfg,
+		},
+	},
+	{
+		.gpio      = BT_HOST_WAKE,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_host_wake_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_host_wake_suspended_cfg,
+		},
+	},
+};
+
+
 static struct msm_gpiomux_config tenderloin_uart_configs[] __initdata = {
 	/* -JCS - recheck these - TODO */
 	{ /* UARTDM_TX */
 		.gpio      = 53,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &uart1dm_active,
-			[GPIOMUX_SUSPENDED] = &uart1dm_suspended,
+			[GPIOMUX_ACTIVE]    = &uart1dm_out_active,
+			[GPIOMUX_SUSPENDED] = &uart1dm_suspended_out_high,
 		},
 	},
 	{ /* UARTDM_RX */
 		.gpio      = 54,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &uart1dm_active,
-			[GPIOMUX_SUSPENDED] = &uart1dm_suspended,
+			[GPIOMUX_SUSPENDED] = &uart1dm_suspended_in_high,
 		},
 	},
 	{ /* UARTDM_CTS */
 		.gpio      = 55,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &uart1dm_active,
-			[GPIOMUX_SUSPENDED] = &uart1dm_suspended,
+			[GPIOMUX_SUSPENDED] = &uart1dm_suspended_in_high,
 		},
 	},
 	{ /* UARTDM_RFR */
 		.gpio      = 56,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &uart1dm_active,
-			[GPIOMUX_SUSPENDED] = &uart1dm_suspended,
+			[GPIOMUX_ACTIVE]    = &uart1dm_out_active,
+			[GPIOMUX_SUSPENDED] = &uart1dm_suspended_out_high,
 		},
 	},
 #if !defined(CONFIG_USB_PEHCI_HCD) && !defined(CONFIG_USB_PEHCI_HCD_MODULE)
@@ -2231,6 +2338,7 @@ struct msm_gpiomux_configs /* -JCS update for tenderloin TODO */
 tenderloin_gpiomux_cfgs[] __initdata = {
 	{tenderloin_gsbi_configs, ARRAY_SIZE(tenderloin_gsbi_configs)},
 	{tenderloin_uart_configs, ARRAY_SIZE(tenderloin_uart_configs)},
+	{tenderloin_bt_configs, ARRAY_SIZE(tenderloin_bt_configs)},
 	{msm8x60_pmic_configs, ARRAY_SIZE(msm8x60_pmic_configs)},
 	{tenderloin_lcdc_configs, ARRAY_SIZE(tenderloin_lcdc_configs)},
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},

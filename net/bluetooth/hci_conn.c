@@ -46,6 +46,23 @@
 #include <net/bluetooth/hci_core.h>
 #include <net/bluetooth/l2cap.h>
 
+int x_l2cap_sock_le_params_valid(struct bt_le_params *le_params)
+{
+	if (!le_params || le_params->latency > BT_LE_LATENCY_MAX ||
+			le_params->scan_window > BT_LE_SCAN_WINDOW_MAX ||
+			le_params->scan_interval < BT_LE_SCAN_INTERVAL_MIN ||
+			le_params->scan_window > le_params->scan_interval ||
+			le_params->interval_min < BT_LE_CONN_INTERVAL_MIN ||
+			le_params->interval_max > BT_LE_CONN_INTERVAL_MAX ||
+			le_params->interval_min > le_params->interval_max ||
+			le_params->supervision_timeout < BT_LE_SUP_TO_MIN ||
+			le_params->supervision_timeout > BT_LE_SUP_TO_MAX) {
+		return 0;
+	}
+
+	return 1;
+}
+
 struct hci_conn *hci_le_connect(struct hci_dev *hdev, __u16 pkt_type,
 				bdaddr_t *dst, __u8 sec_level, __u8 auth_type,
 				struct bt_le_params *le_params)
@@ -100,7 +117,7 @@ struct hci_conn *hci_le_connect(struct hci_dev *hdev, __u16 pkt_type,
 	le->type = LE_LINK;
 
 	memset(&cp, 0, sizeof(cp));
-	if (l2cap_sock_le_params_valid(le_params)) {
+	if (x_l2cap_sock_le_params_valid(le_params)) {
 		cp.supervision_timeout =
 				cpu_to_le16(le_params->supervision_timeout);
 		cp.scan_interval = cpu_to_le16(le_params->scan_interval);
