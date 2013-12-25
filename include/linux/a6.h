@@ -15,7 +15,7 @@
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
-
+#include <mach/msm_hsusb.h>
 
 #define  A6_DEVICE_0   "a6_0"
 #define  A6_DEVICE_1   "a6_1"
@@ -23,6 +23,10 @@
 
 #define  A6_DEVICE     A6_DEVICE_0
 
+#define MAX8903B_CONNECTED_PS_AC	(1U << 1)
+#define MAX8903B_CONNECTED_PS_USB	(1U << 2)
+#define MAX8903B_CONNECTED_PS_DOCK	(1U << 3)
+#define MAX8903B_DOCK_DRAW_MA		1400
 
 /* IOCTLs */
 #define A6_IOCTL_SET_FW_DATA		_IOW('c', 0x01, int)
@@ -45,11 +49,14 @@ struct a6_platform_data {
 
 	int	(*sbw_init)(struct a6_platform_data*);
 	int	(*sbw_deinit)(struct a6_platform_data*);
+
+	int	pwr_gpio_wakeup_cap;  /* set if pwr_gpio is wakeup capable */
+	int	power_supply_connected;	/* Set to 1 if this is the a6 connected to battery, etc */
 };
 
 struct a6_wake_ops {
 	void*	data;
-
+	
 	// external periodic sleep/wake interface
 	int	(*enable_periodic_wake)(void *);
 	int	(*disable_periodic_wake)(void *);
@@ -63,4 +70,7 @@ struct a6_wake_ops {
 	int	(*force_wake)(void *);
 	int	(*force_sleep)(void *);
 };
+
+void a6_charger_event (enum chg_type otg_chg_type);
+
 #endif // _A6_H

@@ -30,7 +30,7 @@ byte TCLK_saved = 1;  // holds the last value of TCLK before entering a JTAG seq
 void TMSL_TDIL(void)
 {
     unsigned long flags = 0;
-
+   
     DisableInterrupts(flags);
     TMSL  TDIL  TDOsbw
     EnableInterrupts(flags);
@@ -148,7 +148,7 @@ void SetTCLK_sbw(void)
 //----------------------------------------------------------------------------
 /*  Shift a value into TDI (MSB first) and simultaneously shift out a value
     from TDO (MSB first).
-    Arguments: word Format (number of bits shifted, 8 (F_BYTE), 16 (F_WORD),
+    Arguments: word Format (number of bits shifted, 8 (F_BYTE), 16 (F_WORD), 
                20 (F_ADDR) or 32 (F_LONG))
                unsigned long Data (data to be shifted into TDI)
     Result:    unsigned long (scanned TDO value)
@@ -209,7 +209,7 @@ unsigned long AllShifts(word Format, unsigned long Data)
      TDOword = ((TDOword << 16) + (TDOword >> 4)) & 0x000FFFFF;
    }
    //EnableInterrupts(flags);
-
+   
    return(TDOword);
 }
 

@@ -33,14 +33,14 @@ typedef unsigned char   byte;
  void ClrTCLK_sbw(void);
  void SetTCLK_sbw(void);
  #define ClrTCLK()       ClrTCLK_sbw()
- #define SetTCLK()       SetTCLK_sbw()
-
+ #define SetTCLK()       SetTCLK_sbw() 
+ 
  #define SetRST()	SetSBWTDIO()
  #define ClrRST()	ClrSBWTDIO()
- #define ReleaseRST()   ()
+ #define ReleaseRST()   () 
  #define SetTST()	SetSBWTCK()
- #define ClrTST()	ClrSBWTCK()
-
+ #define ClrTST()	ClrSBWTCK() 
+ 
 
 /*----------------------------------------------------------------------------
    Definition of global variables

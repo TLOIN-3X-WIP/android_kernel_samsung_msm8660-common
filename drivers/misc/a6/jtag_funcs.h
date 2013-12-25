@@ -35,8 +35,8 @@ typedef unsigned char byte;
 // JTAG identification value for all existing Flash-based MSP430 devices
 #define JTAG_ID                    0x89
 #define JTAG_ID91                  0x91
-// Jtag 17
-#define DEVICE_HAS_JTAG17          1
+// Jtag 17 
+#define DEVICE_HAS_JTAG17          1         
 
 // additional instructions for JTAG_ID91 architectures
 #define IR_COREIP_ID               0xE8   // 0x17

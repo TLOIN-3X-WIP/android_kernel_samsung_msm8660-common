@@ -55,3 +55,4 @@ obj-$(CONFIG_BATTERY_P5LTE)	+= p5-lte_battery.o
 else
 obj-$(CONFIG_BATTERY_SEC)	+= sec_battery.o
 endif
+obj-$(CONFIG_MAX8903B_CHARGER)	+= max8903b_charger.o

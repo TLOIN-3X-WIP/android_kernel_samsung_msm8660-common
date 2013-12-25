@@ -142,13 +142,13 @@ static word ExecutePOR_430Xv2(void)
   ClrTCLK();
   SetTCLK();
 
-  // prepare access to the JTAG CNTRL SIG register
+  // prepare access to the JTAG CNTRL SIG register  
   IR_Shift(IR_CNTRL_SIG_16BIT);
   // release CPUSUSP signal and apply POR signal
   DR_Shift16(0x0C01);
   // release POR signal again
   DR_Shift16(0x0401);
-
+  
   // provide 5 clock cycles
   for (i = 0; i < 5; i++)
   {
@@ -161,7 +161,7 @@ static word ExecutePOR_430Xv2(void)
   ClrTCLK();
   SetTCLK();
   // the CPU is now in 'Full-Emulation-State'
-
+  
   // disable Watchdog Timer on target device now by setting the HOLD signal
   // in the WDT_CNTRL register
   WriteMem_430Xv2(F_WORD, 0x015C, 0x5A80);
@@ -172,7 +172,7 @@ static word ExecutePOR_430Xv2(void)
   {
     return(STATUS_OK);
   }
-
+  
   return(STATUS_ERROR);
 }
 
@@ -185,11 +185,11 @@ static void SetPC_430Xv2(unsigned long Addr)
 {
   unsigned short Mova;
   unsigned short Pc_l;
-
+  
   Mova  = 0x0080;
   Mova += (unsigned short)((Addr>>8) & 0x00000F00);
   Pc_l  = (unsigned short)((Addr & 0xFFFF));
-
+  
   // Check Full-Emulation-State at the beginning
   IR_Shift(IR_CNTRL_SIG_CAPTURE);
   if(DR_Shift16(0) & 0x0301)
@@ -208,9 +208,9 @@ static void SetPC_430Xv2(unsigned long Addr)
     DR_Shift16(Pc_l);
     ClrTCLK();
     SetTCLK();
-    DR_Shift16(0x4303);
+    DR_Shift16(0x4303);    
     ClrTCLK();
-    IR_Shift(IR_ADDR_CAPTURE);
+    IR_Shift(IR_ADDR_CAPTURE);    
     DR_Shift20(0x00000);
     SetTCLK();
   }
@@ -272,11 +272,11 @@ static void StartJtag(void)
 
         // ensure Rst negated
 	SetSBWTDIO();
-	usDelay(100);
+	usDelay(100); 
 
         // PHASE 1 -> TEST PIN TO 1
 	SetSBWTCK(); // prepare to activate TEST logic
-	usDelay(100);
+	usDelay(100); 
 
         // PHASE 2 -> TEST PIN TO 0
 	ClrSBWTCK(); // issue phantom spybiwire clock
@@ -312,30 +312,30 @@ static word GetCoreID (void)
   for (i = 0; i < MAX_ENTRY_TRY; i++)
   {
     // initialize JtagId with an invalid value
-    JtagId = 0;
+    JtagId = 0;  
     // release JTAG/TEST signals to savely reset the test logic
-    StopJtag();
+    StopJtag();        
     // establish the physical connection to the JTAG interface
-    ConnectJTAG();
-    // Apply again 4wire/SBW entry Sequence.
-    // set ResetPin =1
+    ConnectJTAG();               
+    // Apply again 4wire/SBW entry Sequence. 
+    // set ResetPin =1    
       StartJtag();
     // reset TAP state machine -> Run-Test/Idle
-    ResetTAP();
+    ResetTAP();  
     // shift out JTAG ID
-    JtagId = (word)IR_Shift(IR_CNTRL_SIG_CAPTURE);
-
+    JtagId = (word)IR_Shift(IR_CNTRL_SIG_CAPTURE);  
+     
     //printk("JTAG ID returned: %x; expected: %x\n", JtagId, JTAG_ID91);
     // break if a valid JTAG ID is being returned
-    if(JtagId == JTAG_ID91)
+    if(JtagId == JTAG_ID91) 
       break;
-    //
+    // 
     SetTargetVcc( 0 );
     MsDelay(200);
     SetTargetVcc( VCC_LEVEL );
-    ConnectJTAG();
+    ConnectJTAG(); 
       StartJtag();
-    ResetTAP();
+    ResetTAP(); 
 
     JtagId = (word)IR_Shift(IR_CNTRL_SIG_CAPTURE);
     //printk("(2) JTAG ID returned: %x; expected: %x\n", JtagId, JTAG_ID91);
@@ -343,12 +343,12 @@ static word GetCoreID (void)
       break;
   }
   if(i >= MAX_ENTRY_TRY)
-  {
+  {         
     // if connected device is MSP4305438 JTAG Mailbox is not usable
     #ifdef ACTIVATE_MAGIC_PATTERN
     /* xxx for(i = 0; i < MAX_ENTRY_TRY; i++)
     {
-        // if no JTAG ID is  beeing returnd -> apply magic pattern to stop user cd excecution
+        // if no JTAG ID is  beeing returnd -> apply magic pattern to stop user cd excecution     
       if((JtagId = magicPattern()) == 1 || i >= MAX_ENTRY_TRY)
       {
           // if magic pattern faild and 4 tries passed -> return status error
@@ -356,13 +356,13 @@ static word GetCoreID (void)
       }
       else
       {
-          break;
+          break; 
       }
     }*/
     // is MSP4305438 mailbox is not usalbe
     #else
        return(STATUS_ERROR);
-    #endif
+    #endif   
   }
   if(JtagId == JTAG_ID91)
   {
@@ -379,7 +379,7 @@ static word GetCoreID (void)
     // The ID pointer is an un-scrambled 20bit value
     DeviceIdPointer = ((DeviceIdPointer & 0xFFFF) << 4 )  + (DeviceIdPointer >> 16 );
     //printk("DeviceIdPointer returned: %lx\n", DeviceIdPointer);
-
+    
     return(STATUS_OK);
   }
   else
@@ -418,7 +418,7 @@ static word SyncJtag_AssertPor (void)
     printk("%s: Failed ExecutePOR_430Xv2.\n", __func__);
     return(STATUS_ERROR);
   }
-
+  
   return(STATUS_OK);
 }
 //----------------------------------------------------------------------------
@@ -564,7 +564,7 @@ word GetDevice_430Xv2(void)
 
   // read DeviceId from memory
   ReadMemQuick_430Xv2(DeviceIdPointer + 4, 1, (word*)&DeviceId);
-
+    
   return(STATUS_OK);
 }
 
@@ -609,7 +609,7 @@ int ReleaseDevice_430Xv2(unsigned long Addr, byte Stat)
 			IR_Shift(IR_CNTRL_SIG_RELEASE);
 		}
 
-		ClrSBWTCK(); // exit spybiwire mode
+		ReleaseTarget();
 
 		if (i) { // entry pass
 
@@ -671,7 +671,7 @@ void WriteMem_430Xv2(word Format, unsigned long Addr, word Data)
     }
     IR_Shift(IR_ADDR_16BIT);
     DR_Shift20(Addr);
-
+    
     SetTCLK();
     // New style: Only apply data during clock high phase
     IR_Shift(IR_DATA_TO_ADDR);
@@ -697,7 +697,7 @@ void WriteMem_430Xv2(word Format, unsigned long Addr, word Data)
 void WriteMemQuick_430Xv2(unsigned long StartAddr, unsigned long Length, word *DataArray)
 {
   unsigned long i;
-
+  
   for (i = 0; i < Length; i++)
   {
     WriteMem_430Xv2(F_WORD, StartAddr, DataArray[i]);
@@ -720,7 +720,7 @@ word WriteAllSections_430Xv2(const unsigned short *data, const unsigned long *ad
 {
     int i, pos = 0;
     //time_t start_time;
-
+    
     //start_time = current_time();
 
     printk("\n\n");
@@ -775,7 +775,7 @@ word VerifyAllSections_430Xv2(const unsigned short *data, const unsigned long *a
 	    yield();
 
 	    pos+=length_of_sections[i];
-    }
+    }    
 
     return(latched_ret);
 }
@@ -837,7 +837,7 @@ int ttf_extract_conv_fn
 	(const unsigned short inp_data, unsigned char* op_data, unsigned int count)
 {
 	int ret;
-
+	
 	ret = sprintf(op_data, "%02X %02X ",
 		      (unsigned char)inp_data,
 		      (unsigned char)(inp_data >> 8));
@@ -967,7 +967,7 @@ int GetChecksumData_430Xv2(unsigned short* cksum1, unsigned short* cksum2,
 word ReadMem_430Xv2(word Format, unsigned long Addr)
 {
   word TDOword = 0;
-
+  
   // Check Init State at the beginning
   IR_Shift(IR_CNTRL_SIG_CAPTURE);
   if(DR_Shift16(0) & 0x0301)
@@ -989,14 +989,14 @@ word ReadMem_430Xv2(word Format, unsigned long Addr)
     SetTCLK();
     ClrTCLK();
     TDOword = DR_Shift16(0x0000);       // Shift out 16 bits
-
+    
     SetTCLK();
     // one or more cycle, so CPU is driving correct MAB
     ClrTCLK();
     SetTCLK();
     // Processor is now again in Init State
   }
-
+  
   return TDOword;
 }
 
@@ -1010,14 +1010,14 @@ word ReadMem_430Xv2(word Format, unsigned long Addr)
 void ReadMemQuick_430Xv2(unsigned long StartAddr, unsigned long Length, word *DataArray)
 {
   unsigned long i;
-
+  
   SetPC_430Xv2(StartAddr);
   IR_Shift(IR_CNTRL_SIG_16BIT);
   DR_Shift16(0x0501);
   IR_Shift(IR_ADDR_CAPTURE);
-
+  
   IR_Shift(IR_DATA_QUICK);
-
+  
   for (i = 0; i < Length; i++)
   {
     SetTCLK();
@@ -1039,12 +1039,12 @@ word VerifyMem_430Xv2(unsigned long StartAddr, unsigned long Length, word *DataA
   unsigned long i;
   word Data;
   char err_flag = 0;
-
+  
   SetPC_430Xv2(StartAddr);
   IR_Shift(IR_CNTRL_SIG_16BIT);
   DR_Shift16(0x0501);
   IR_Shift(IR_ADDR_CAPTURE);
-
+  
   IR_Shift(IR_DATA_QUICK);
 
   for (i = 0; i < Length; i++)
@@ -1061,7 +1061,7 @@ word VerifyMem_430Xv2(unsigned long StartAddr, unsigned long Length, word *DataA
     }
   }
   IR_Shift(IR_CNTRL_SIG_CAPTURE);
-
+  
   return((err_flag == 0) ? STATUS_OK : STATUS_ERROR);
 }
 

@@ -127,6 +127,11 @@
 #include <linux/power_supply.h>
 #endif
 
+#ifdef CONFIG_MAX8903B_CHARGER
+#include <linux/max8903b_charger.h>
+#include <linux/power_supply.h>
+#endif
+
 #ifdef CONFIG_A6
 #include <linux/a6_sbw_interface.h>
 #include <linux/a6.h>
@@ -147,6 +152,13 @@
 
 // Pointer to topaz/tenderloin opal/shortloin wifi/3G pin arrays
 int *pin_table = NULL;
+
+#ifdef CONFIG_MAX8903B_CHARGER
+static unsigned max8903b_ps_connected = 0;
+static unsigned max8903b_vbus_draw_ma = 0;
+static unsigned max8903b_vbus_draw_ma_max = 0;
+void max8903b_set_vbus_draw (unsigned ma);
+#endif
 
 void tenderloin_clock_fixup(void);
 
@@ -1780,6 +1792,7 @@ static struct a6_platform_data a6_0_platform_data = {
 	.wake_ops		= &a6_wake_ops_impl_0,
 	.sbw_init		= a6_sbw_init_imp,
 	.sbw_deinit		= a6_sbw_deinit_imp,
+	.power_supply_connected = 1,
 };
 
 static struct a6_platform_data a6_1_platform_data = {
@@ -1790,6 +1803,7 @@ static struct a6_platform_data a6_1_platform_data = {
 	.wake_ops		= &a6_wake_ops_impl_1,
 	.sbw_init		= a6_sbw_init_imp,
 	.sbw_deinit		= a6_sbw_deinit_imp,
+	.power_supply_connected = 0,
 };
 
 static uint32_t a6_0_config_data[] = {
@@ -2549,6 +2563,11 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.init_vddcx              = msm_hsusb_init_vddcx,
 #ifdef CONFIG_BATTERY_MSM8X60
 	.chg_vbus_draw = msm_charger_vbus_draw,
+#elif defined (CONFIG_MAX8903B_CHARGER)
+	.chg_vbus_draw = max8903b_set_vbus_draw,
+#endif
+#ifdef CONFIG_A6
+	.chg_connected = a6_charger_event,
 #endif
 #if defined(CONFIG_CHARGER_MAX8903)
 	.chg_connected	 = msm_hsusb_chg_connected,
@@ -2562,6 +2581,218 @@ static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
 	.is_phy_status_timer_on = 1,
 };
 #endif
+
+#ifdef CONFIG_MAX8903B_CHARGER
+// available current settings for MAX8903B per HW revision
+static int sel_tbl_protos[] = {
+	CURRENT_900MA,
+	CURRENT_1000MA,
+	CURRENT_1500MA,
+	CURRENT_2000MA,
+};
+
+static int sel_tbl_evt1[] = {
+	CURRENT_750MA,
+	CURRENT_900MA,
+	CURRENT_1500MA,
+	CURRENT_1400MA,
+};
+
+static int sel_tbl_evt2[] = {
+	CURRENT_750MA,
+	CURRENT_900MA,
+	CURRENT_2000MA,
+	CURRENT_1400MA,
+};
+
+static int max8903b_control_index(enum max8903b_current value)
+{
+	int i, index;
+	int *table;
+	int v = value;
+
+	switch (board_type)
+	{
+		case TOPAZ_PROTO:
+		case TOPAZ_PROTO2:
+		// case TOPAZ_3G_PROTO:
+		// case TOPAZ_3G_PROTO2:
+			table = sel_tbl_protos;
+			break;
+
+		case TOPAZ_EVT1:
+			table = sel_tbl_evt1;
+			if (v == CURRENT_2000MA)
+				v = CURRENT_1500MA;
+			break;
+
+		default:
+			table = sel_tbl_evt2;
+			break;
+	}
+
+	// find index from table
+	for (i = 0 ; i < 4 ; i++)
+	{
+		if (v == table[i]) {
+			index = i;
+			break;
+		}
+
+		if (i == 3) {
+			index = -EINVAL;  // invalid input
+		}
+	}
+
+	return index;
+}
+
+int max8903b_set_DC_CHG_Mode_current(enum max8903b_current value)
+{
+	int index;
+
+	index = max8903b_control_index(value);
+	switch(index)	{
+		case 0: // select output port 0
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_1,0);
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_2,0);
+			pr_debug("max8903 MUX : LOW / LOW\n");
+			break;
+		case 1: // select output port 1
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_1,0);
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_2,1);
+			pr_debug("max8903 MUX : LOW / HIGH\n");
+			break;
+		case 2: // select output port 2
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_1,1);
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_2,0);
+			pr_debug("max8903 MUX : HIGH / LOW\n");
+			break;
+		case 3: // select output port 3
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_1,1);
+			gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_2,1);
+			pr_debug("max8903 MUX : HIGH / HIGH\n");
+			break;
+		default:
+			printk(KERN_INFO "%s: Invalid current setting, not supported in HW rev.\n", __func__);
+			return -1;
+			break;
+	}
+	return 0;
+};
+
+int max8903b_request_release_gpios(int request);
+void max8903b_suspend_gpio_config(void);
+
+static struct	max8903b_platform_data	max8903b_charger_pdata = {
+	.DCM_in 	= MAX8903B_GPIO_DC_CHG_MODE,
+	.DCM_in_polarity	= 1,
+	.IUSB_in 	= MAX8903B_GPIO_USB_CHG_MODE,
+	.IUSB_in_polarity	= 0,
+	.USUS_in 	= MAX8903B_GPIO_USB_CHG_SUS,
+	.USUS_in_polarity	= 0,
+	.CEN_N_in 	= MAX8903B_GPIO_CHG_EN,
+	.CEN_N_in_polarity	= 1,
+	.DOK_N_out 	= MAX8903B_GPIO_DC_OK,
+	.CHG_N_out 	= MAX8903B_GPIO_STATUS_N,
+	.FLT_N_out 	= MAX8903B_GPIO_FAULT_N,
+	.set_DC_CHG_Mode_current = max8903b_set_DC_CHG_Mode_current,
+	.request_release_gpios = max8903b_request_release_gpios,
+	.suspend_gpio_config  = max8903b_suspend_gpio_config,
+};
+
+static struct 	platform_device 	max8903b_charger_device = {
+	.name               = "max8903b_chg",
+	.id                 = 0,
+	.dev.platform_data  = &max8903b_charger_pdata,
+};
+
+int max8903b_request_release_gpios(int request)
+{
+	static int gpio_array_init = 0;
+	static int is_gpio_active = 0;
+	static int max8903b_gpios[9];
+	int rc = 0;
+
+	if (gpio_array_init == 0) {
+		max8903b_gpios[0] = 	max8903b_charger_pdata.DCM_in;
+		max8903b_gpios[1] = 	max8903b_charger_pdata.IUSB_in;
+		max8903b_gpios[2] = 	max8903b_charger_pdata.USUS_in;
+		max8903b_gpios[3] =	max8903b_charger_pdata.CEN_N_in;
+		max8903b_gpios[4] =	max8903b_charger_pdata.DOK_N_out;
+		max8903b_gpios[5] =	max8903b_charger_pdata.CHG_N_out;
+		max8903b_gpios[6] =	max8903b_charger_pdata.FLT_N_out;
+		max8903b_gpios[7] =	MAX8903B_GPIO_CHG_D_ISET_1;
+		max8903b_gpios[8] =	MAX8903B_GPIO_CHG_D_ISET_2;
+
+		gpio_array_init = 1;
+	}
+
+	if (request) {   // reqest gpios
+		if (is_gpio_active == 0) {
+			rc = configure_gpiomux_gpios(1, max8903b_gpios, ARRAY_SIZE(max8903b_gpios));
+			if (rc == 0)
+				is_gpio_active = request;  // requested
+		} else {
+			printk("%s: GPIOs were already active(requested) !!!\n", __func__);
+		}
+	} else {    // free gpios
+		if (is_gpio_active != 0) {
+			rc = configure_gpiomux_gpios(0, max8903b_gpios, ARRAY_SIZE(max8903b_gpios));
+			if (rc == 0)
+				is_gpio_active = request;  // freed
+		} else {
+			printk("%s: GPIOs were already released(freed) !!!\n", __func__);
+		}
+	}
+
+	return rc;
+}
+
+/* Set necessary GPIOs for suspend mode state. */
+void max8903b_suspend_gpio_config(void)
+{
+	gpio_set_value(MAX8903B_GPIO_USB_CHG_MODE, 1);
+	gpio_set_value(MAX8903B_GPIO_CHG_EN, 0);
+
+	gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_1, 0);
+	gpio_set_value(MAX8903B_GPIO_CHG_D_ISET_2, 0);
+}
+
+void max8903b_set_connected_ps (unsigned connected)
+{
+	max8903b_ps_connected = connected;
+
+	if (!connected) {
+		max8903b_disable_charge();
+		max8903b_vbus_draw_ma_max = 0;
+	} else if (connected & MAX8903B_CONNECTED_PS_DOCK) {
+		max8903b_set_charge_ma(MAX8903B_DOCK_DRAW_MA);
+	}
+}
+EXPORT_SYMBOL (max8903b_set_connected_ps);
+
+/* Callback for msm72k_otg to notify charge supplied by phy.
+ * Current draw defaults to 500mA. WebOS seems to use the sysfs to
+ * set current_limit on usb plugin.
+ */
+void max8903b_set_vbus_draw (unsigned ma)
+{
+	max8903b_vbus_draw_ma = ma;
+
+	if (ma > max8903b_vbus_draw_ma_max) {
+		max8903b_vbus_draw_ma_max = ma;
+	}
+
+	if (!(max8903b_ps_connected & MAX8903B_CONNECTED_PS_DOCK)) {
+		if (max8903b_ps_connected & MAX8903B_CONNECTED_PS_AC) {
+			max8903b_set_charge_ma(max8903b_vbus_draw_ma_max);
+		} else {
+			max8903b_set_charge_ma(ma);
+		}
+	}
+}
+#endif  /* CONFIG_MAX8903B_CHARGER */
 
 #ifdef CONFIG_USB_G_ANDROID
 
@@ -7010,6 +7241,9 @@ static struct platform_device *surf_devices[] __initdata = {
 #endif
 #ifdef CONFIG_CHARGER_MAX8903
 	&max8903_charger_device,
+#endif
+#ifdef CONFIG_MAX8903B_CHARGER
+	&max8903b_charger_device,
 #endif
 #ifdef CONFIG_KEYBOARD_GPIO
 	&msm_gpio_keys,
@@ -13599,6 +13833,15 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (machine_is_tenderloin()) {
 		register_lcdc_panel();
 	}
+
+#ifdef CONFIG_MAX8903B_CHARGER
+	//reverse the polarity of the max8903b USUS_pin on TopazWifi from DVT1 hwbuild
+	if ((board_type > TOPAZ_EVT1)
+			// && (board_type != TOPAZ_4G_PROTO)
+			) {
+		max8903b_charger_pdata.USUS_in_polarity = 1;
+	}
+#endif
 
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||

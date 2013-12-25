@@ -368,5 +368,10 @@ config PM8921_BMS
 	  Say Y here to enable support for pm8921 chip bms subdevice
 
 
+config MAX8903B_CHARGER
+	tristate "MAXIM 8903B charger"
+	default n
+	help
+	  Say Y to enable support for the MAX8903B charger.
 
 endif # POWER_SUPPLY

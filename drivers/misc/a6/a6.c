@@ -36,9 +36,14 @@
 #include <linux/gpio.h>
 #include <linux/cdev.h>
 #include <linux/debugfs.h>
+#include <linux/switch.h>
+#include <linux/power_supply.h>
+#include <mach/msm_hsusb.h>
+#include <linux/max8903b_charger.h>
+
 #include "high_level_funcs.h"
-#include <linux/firmware.h>
-#include <linux/max8903_charger.h>
+
+void max8903b_set_connected_ps(unsigned connected);
 
 #define A2A_RD_BUFF_SIZE (4 * 1024)
 #define A2A_WR_BUFF_SIZE (4 * 1024)
@@ -62,6 +67,16 @@ enum {
 
 static int a6_debug_mask = 0x0;
 static int a6_tp_irq_count = 0;
+static int a6_t2s_dup_correct = 0;
+static int a6_disable_dock_switch = 0;
+
+static int param_set_disable_dock_switch(const char *val, struct kernel_param *kp);
+param_check_int(disable_dock_switch, &(a6_disable_dock_switch));
+module_param_call(disable_dock_switch, param_set_disable_dock_switch,
+	param_get_int, &a6_disable_dock_switch,
+	S_IRUGO | S_IWUSR | S_IWGRP
+	);
+__MODULE_PARM_TYPE(disable_dock_switch, int);
 
 module_param_named(
 		   debug_mask, a6_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
@@ -69,6 +84,10 @@ module_param_named(
 
 module_param_named(
 		   a6_irq_count, a6_tp_irq_count, int, S_IRUGO | S_IWUSR | S_IWGRP
+		  );
+
+module_param_named(
+		   t2s_dup_correct, a6_t2s_dup_correct, int, S_IRUGO | S_IWUSR | S_IWGRP
 		  );
 
 #define A6_DPRINTK(mask, level, message, ...) \
@@ -85,6 +104,8 @@ int32_t diff_time;
 
 uint32_t start_last_a6_activity = 0;
 #endif
+
+long a6_last_ps_connect = 0;
 
 /* page 0x00 */
 /* host interrupts */
@@ -188,19 +209,24 @@ uint32_t start_last_a6_activity = 0;
 #define TS2_I2C_COMM_STATUS                            0x0200
 #define TS2_I2C_COMM_STATUS_RX_FULL			0x02
 #define TS2_I2C_COMM_STATUS_TX_EMPTY			0x01
-#define TS2_I2C_COMM_TXDATA_RXDATA                     0x0201
-
+#define TS2_I2C_COMM_TXDATA_RXDATA_RESERVED_1          0x0201 /* reserved 1 */
+#define TS2_I2C_COMM_TXDATA_RXDATA_RESERVED_2          0x0202 /* reserved 2 */
+#define TS2_I2C_COMM_TXDATA_RXDATA                     0x0203 /* side-effect */
 
 /* page 0x03 */
 /* log */
 #define TS2_I2C_LOG_LEVEL                              0x0300
 #define TS2_I2C_LOG_INT_THRESHOLD                      0x0301
-#define TS2_I2C_LOG_LOST_MSB                           0x0302
-#define TS2_I2C_LOG_LOST_LSB                           0x0303
-#define TS2_I2C_LOG_COUNT_MSB                          0x0304
-#define TS2_I2C_LOG_COUNT_LSB                          0x0305
-#define TS2_I2C_LOG_ENTRY_MSB                          0x0306
-#define TS2_I2C_LOG_ENTRY_LSB                          0x0307
+#define TS2_I2C_LOG_LOST_MSB_RESERVED_1                0x0302 /* reserved 1 */
+#define TS2_I2C_LOG_LOST_MSB_RESERVED_2                0x0303 /* reserved 2 */
+#define TS2_I2C_LOG_LOST_MSB                           0x0304 /* side-effect */
+#define TS2_I2C_LOG_LOST_LSB                           0x0305
+#define TS2_I2C_LOG_COUNT_MSB                          0x0306
+#define TS2_I2C_LOG_COUNT_LSB                          0x0307
+#define TS2_I2C_LOG_ENTRY_MSB_RESERVED_1               0x0308 /* reserved 1 */
+#define TS2_I2C_LOG_ENTRY_MSB_RESERVED_2               0x0309 /* reserved 2 */
+#define TS2_I2C_LOG_ENTRY_MSB                          0x030a /* side-effect */
+#define TS2_I2C_LOG_ENTRY_LSB                          0x030b
 
 
 /* page 0x04 */
@@ -221,7 +247,7 @@ uint32_t start_last_a6_activity = 0;
 #define	TS2_I2C_ENUM_SERNO_2                           0x040C
 #define	TS2_I2C_ENUM_SERNO_1                           0x040D
 #define	TS2_I2C_ENUM_SERNO_0                           0x040E
-#define	TS2_I2C_ENUM_HW_REV                            0x040F
+#define	TS2_I2C_ENUM_ASSY_REV                          0x040F
 #define	TS2_I2C_ENUM_FW_VER_2                          0x0410
 #define	TS2_I2C_ENUM_FW_VER_1                          0x0411
 #define	TS2_I2C_ENUM_FW_VER_0                          0x0412
@@ -263,8 +289,12 @@ uint32_t start_last_a6_activity = 0;
 #define	TS2_I2C_ENUM_REMOTE_PROTOCOL_MAP_VER           0x0502
 #define	TS2_I2C_ENUM_REMOTE_MFGR_ID_HI                 0x0503
 #define	TS2_I2C_ENUM_REMOTE_MFGR_ID_LO                 0x0504
+#define	TS2_I2C_ENUM_REMOTE_MFGR_ID_HI_V1              0x0505
+#define	TS2_I2C_ENUM_REMOTE_MFGR_ID_LO_V1              0x0506
 #define	TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_HI            0x0505
 #define	TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_LO            0x0506
+#define	TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_HI_V1         0x0507
+#define	TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_LO_V1         0x0508
 #define	TS2_I2C_ENUM_REMOTE_SERNO_7                    0x0507
 #define	TS2_I2C_ENUM_REMOTE_SERNO_6                    0x0508
 #define	TS2_I2C_ENUM_REMOTE_SERNO_5                    0x0509
@@ -273,7 +303,7 @@ uint32_t start_last_a6_activity = 0;
 #define	TS2_I2C_ENUM_REMOTE_SERNO_2                    0x050C
 #define	TS2_I2C_ENUM_REMOTE_SERNO_1                    0x050D
 #define	TS2_I2C_ENUM_REMOTE_SERNO_0                    0x050E
-#define	TS2_I2C_ENUM_REMOTE_HW_REV                     0x050F
+#define	TS2_I2C_ENUM_REMOTE_ASSY_REV                   0x050F
 #define	TS2_I2C_ENUM_REMOTE_FW_VER_2                   0x0510
 #define	TS2_I2C_ENUM_REMOTE_FW_VER_1                   0x0511
 #define	TS2_I2C_ENUM_REMOTE_FW_VER_0                   0x0512
@@ -288,6 +318,8 @@ uint32_t start_last_a6_activity = 0;
 #define	TS2_I2C_ENUM_REMOTE_TNODE_MIN                  0x051B
 #define	TS2_I2C_ENUM_REMOTE_TNODE_MAX                  0x051C
 #define	TS2_I2C_ENUM_REMOTE_POWER_MAX                  0x051D
+
+
 
 #define	TS2_I2C_ENUM_REMOTE_ACCE_0                     0x0528
 #define	TS2_I2C_ENUM_REMOTE_ACCE_1                     0x0529
@@ -385,8 +417,124 @@ uint32_t start_last_a6_activity = 0;
 #define TS2_I2C_COMMAND_DATA_MSB                       0x1003
 #define TS2_I2C_COMMAND_DATA_LSB                       0x1004
 
+#define TS2_I2C_DEBUG_TRACE_DATA_RESERVED_1            0x101e /* reserved 1 */
+#define TS2_I2C_DEBUG_TRACE_DATA_RESERVED_2            0x101f /* reserved 2 */
+#define TS2_I2C_DEBUG_TRACE_DATA                       0x1020 /* side-effect */
+
+#define A6_REG_TS2_I2C_INT_MASK_0	0
+#define A6_REG_TS2_I2C_INT_MASK_1	1
+#define A6_REG_TS2_I2C_INT_MASK_2	2
+#define A6_REG_TS2_I2C_INT_MASK_3	3
+#define A6_REG_TS2_I2C_INT_STATUS_0	4
+#define A6_REG_TS2_I2C_INT_STATUS_1	5
+#define A6_REG_TS2_I2C_INT_STATUS_2	6
+#define A6_REG_TS2_I2C_INT_STATUS_3	7
+#define A6_REG_TS2_I2C_BAT_STATUS	8
+#define A6_REG_TS2_I2C_BAT_RARC	9
+#define A6_REG_TS2_I2C_BAT_RSRC	10
+#define A6_REG_TS2_I2C_BAT_AVG_CUR_LSB_MSB	11
+#define A6_REG_TS2_I2C_BAT_TEMP_LSB_MSB	12
+#define A6_REG_TS2_I2C_BAT_VOLT_LSB_MSB	13
+#define A6_REG_TS2_I2C_BAT_CUR_LSB_MSB	14
+#define A6_REG_TS2_I2C_BAT_COULOMB_LSB_MSB	15
+// #define A6_REG_TS2_I2C_BAT_AS	16 // two entries? TODO
+#define A6_REG_TS2_I2C_BAT_FULL_LSB_MSB	17
+#define A6_REG_TS2_I2C_BAT_FULL40_LSB_MSB	18
+#define A6_REG_TS2_I2C_BAT_RSNSP	19
+#define A6_REG_TS2_I2C_BAT_ROMID_0	20
+#define A6_REG_TS2_I2C_BAT_COMMAND_STATUS	21
+#define A6_REG_TS2_I2C_BAT_TEMP_LOW_LSB_MSB	22
+#define A6_REG_TS2_I2C_BAT_TEMP_HIGH_LSB_MSB	23
+#define A6_REG_TS2_I2C_BAT_VOLT_LOW_LSB_MSB	24
+#define A6_REG_TS2_I2C_BAT_RARC_CRIT	25
+#define A6_REG_TS2_I2C_BAT_RARC_LOW_2	26
+#define A6_REG_TS2_I2C_BAT_RARC_LOW_1	27
+#define A6_REG_TS2_I2C_BAT_RAAC_MSB	28
+#define A6_REG_TS2_I2C_ID	29
+#define A6_REG_TS2_I2C_FLAGS_0	30
+#define A6_REG_TS2_I2C_FLAGS_2	31
+#define A6_REG_VERSION	32
+#define A6_REG_TS2_I2C_V_OFFSET	33
+#define A6_REG_TS2_I2C_WAKEUP_PERIOD	34
+#define A6_REG_TS2_I2C_COMMAND	35
+#define A6_REG_REMOTE_VERSION	36
+#define A6_REG_ACCESSORY_DATA_0	37
+#define A6_REG_ACCESSORY_DATA_1	38
+#define A6_REG_ACCESSORY_DATA_2	39
+#define A6_REG_ACCESSORY_DATA_3	40
+#define A6_REG_ACCESSORY_DATA_4	41
+#define A6_REG_ACCESSORY_DATA_5	42
+#define A6_REG_ACCESSORY_DATA_6	43
+#define A6_REG_ACCESSORY_DATA_7	44
+#define A6_REG_ACCESSORY_DATA_8	45
+#define A6_REG_ACCESSORY_DATA_9	46
+#define A6_REG_ACCESSORY_DATA_10	47
+#define A6_REG_ACCESSORY_DATA_11	48
+#define A6_REG_ACCESSORY_DATA_12	49
+#define A6_REG_REMOTE_ACCESSORY_DATA_0	50
+#define A6_REG_REMOTE_ACCESSORY_DATA_1	51
+#define A6_REG_REMOTE_ACCESSORY_DATA_2	52
+#define A6_REG_REMOTE_ACCESSORY_DATA_3	53
+#define A6_REG_REMOTE_ACCESSORY_DATA_4	54
+#define A6_REG_REMOTE_ACCESSORY_DATA_5	55
+#define A6_REG_REMOTE_ACCESSORY_DATA_6	56
+#define A6_REG_REMOTE_ACCESSORY_DATA_7	57
+#define A6_REG_REMOTE_ACCESSORY_DATA_8	58
+#define A6_REG_REMOTE_ACCESSORY_DATA_9	59
+#define A6_REG_REMOTE_ACCESSORY_DATA_10	60
+#define A6_REG_REMOTE_ACCESSORY_DATA_11	61
+#define A6_REG_REMOTE_ACCESSORY_DATA_12	62
+#define A6_REG_TS2_I2C_COMM_STATUS	63
+#define A6_REG_TS2_I2C_COMM_TXDATA_RXDATA	64
+#define A6_REG_TS2_I2C_BAT_SACR_LSB_MSB	65
+#define A6_REG_TS2_I2C_BAT_ASL	66
+// #define A6_REG_TS2_I2C_BAT_AS	67 // two entries? TODO
+#define A6_REG_TS2_I2C_BAT_FAC_LSB_MSB	68
+#define A6_REG_MAX_POWER_AVAILABLE	69
+#define A6_REG_TS2_I2C_ENUM_REMOTE_STRUCT_VER	70
+#define A6_REG_ACCESSORY_DATA_13	71
+#define A6_REG_ACCESSORY_DATA_14	72
+#define A6_REG_ACCESSORY_DATA_15	73
+#define A6_REG_REMOTE_ACCESSORY_DATA_13	74
+#define A6_REG_REMOTE_ACCESSORY_DATA_14	75
+#define A6_REG_REMOTE_ACCESSORY_DATA_15	76
+#define A6_REG_TS2_I2C_ENUM_MIN_PWM	77
+#define A6_REG_ACCESSORY_DATA_COMBO	78
+#define A6_REG_REMOTE_ACCESSORY_DATA_COMBO	79
+#define A6_REG_TS2_I2C_COMMAND_ADDR_LSB_MSB	80
+#define A6_REG_TS2_I2C_COMMAND_DATA_LSB_MSB	81
+#define A6_REG_REMOTE_MFGRID_V1	82
+#define A6_REG_REMOTE_MFGRID_V2	83
+#define A6_REG_REMOTE_PRODUCTID_V1	84
+#define A6_REG_REMOTE_PRODUCTID_V2	85
+#define A6_REG_REMOTE_SERNO_V1	86
+#define A6_REG_REMOTE_SERNO_V2	87
+#define A6_REG_LOCAL_MFGRID	88
+#define A6_REG_LOCAL_PRODUCTID	89
+#define A6_REG_LOCAL_SERNO	90
+
+
 #define RSENSE_DEFAULT	20;
 #define FORCE_WAKE_TIMER_EXPIRY (HZ/20)
+
+#define a6_wait_event_ex(wq, condition)					\
+do {									\
+	if (condition)							\
+		break;							\
+	do {								\
+		DEFINE_WAIT(__wait);					\
+									\
+		for (;;) {						\
+			prepare_to_wait_exclusive(&wq, &__wait,		\
+				TASK_UNINTERRUPTIBLE);			\
+			if (condition)					\
+				break;					\
+			schedule();					\
+		}							\
+		finish_wait(&wq, &__wait);				\
+	} while (0);							\
+} while (0)
+
 
 enum {
 	DEVICE_BUSY_BIT = 0,
@@ -405,9 +553,10 @@ enum {
 	KILLING_AID_TASK,
 	IS_QUIESCED,
 #endif
+	IS_SUSPENDED,
+	INT_PENDING,
 	SIZE_FLAGS
 };
-
 
 struct a6_device_state {
 	struct i2c_client *i2c_dev;
@@ -455,10 +604,20 @@ struct a6_device_state {
 	struct file_operations pmem_fops;
 	struct miscdevice pmem_mdev;
 	char pmem_dev_name[16];
-
+	
 	char *a2a_rd_buf, *a2a_wr_buf;
 	char *a2a_rp, *a2a_wp;
+
+	enum chg_type otg_chg_type;
+	struct delayed_work charge_work;
+	struct delayed_work init_connected_ps_work;
+	int stop_heartbeat;
+	int last_percent;
+
+	struct switch_dev *dock_switch;
 };
+
+struct a6_device_state *batt_state;
 
 #ifdef A6_PQ
 int32_t a6_start_ai_dispatch_task(struct a6_device_state* state);
@@ -517,11 +676,19 @@ int32_t format_accessory_combo(const struct a6_device_state* state, const uint8_
 			       uint8_t* fmt_buffer, uint32_t size_buffer);
 int32_t format_u16_hex(const struct a6_device_state* state, const uint8_t* val,
 		       uint8_t* fmt_buffer, uint32_t size_buffer);
+int32_t format_serno_v1(const struct a6_device_state* state, const uint8_t* val,
+			uint8_t* fmt_buffer, uint32_t size_buffer);
+int32_t format_serno_v2(const struct a6_device_state* state, const uint8_t* val,
+			uint8_t* fmt_buffer, uint32_t size_buffer);
 
 static ssize_t a6_diag_show(struct device *dev, struct device_attribute *dev_attr, char *buf);
 static ssize_t a6_diag_store(struct device *dev, struct device_attribute *dev_attr, const char *buf,
 			     size_t count);
 static ssize_t a6_val_cksum_show(struct device *dev, struct device_attribute *attr, char *buf);
+
+static void a6_dock_update_state(struct a6_device_state *state);
+
+static void a6_update_connected_ps(void);
 
 void a6_force_wake_timer_callback(ulong data);
 /*
@@ -720,7 +887,7 @@ struct a6_register_desc {
 			TS2_I2C_ENUM_SERNO_2, TS2_I2C_ENUM_SERNO_3,
 			TS2_I2C_ENUM_SERNO_4, TS2_I2C_ENUM_SERNO_5,
 			TS2_I2C_ENUM_SERNO_6, TS2_I2C_ENUM_SERNO_7,
-			TS2_I2C_ENUM_HW_REV, TS2_I2C_ENUM_FW_VER_0,
+			TS2_I2C_ENUM_ASSY_REV, TS2_I2C_ENUM_FW_VER_0,
 			TS2_I2C_ENUM_FW_VER_1, TS2_I2C_ENUM_FW_VER_2},
 		.num_ids = 16, .ro = 1},
 
@@ -754,7 +921,7 @@ struct a6_register_desc {
 			TS2_I2C_ENUM_REMOTE_SERNO_2, TS2_I2C_ENUM_REMOTE_SERNO_3,
 			TS2_I2C_ENUM_REMOTE_SERNO_4, TS2_I2C_ENUM_REMOTE_SERNO_5,
 			TS2_I2C_ENUM_REMOTE_SERNO_6, TS2_I2C_ENUM_REMOTE_SERNO_7,
-			TS2_I2C_ENUM_REMOTE_HW_REV, TS2_I2C_ENUM_REMOTE_FW_VER_0,
+			TS2_I2C_ENUM_REMOTE_ASSY_REV, TS2_I2C_ENUM_REMOTE_FW_VER_0,
 			TS2_I2C_ENUM_REMOTE_FW_VER_1, TS2_I2C_ENUM_REMOTE_FW_VER_2},
 		.num_ids = 16, .ro = 1},
 
@@ -1047,14 +1214,149 @@ struct a6_register_desc {
 		.id = {TS2_I2C_COMMAND_DATA_LSB, TS2_I2C_COMMAND_DATA_MSB},
 		.format = format_u16_hex,
 		.num_ids = 2, .ro = 0},
+
+	[82] = {.debug_name = "REMOTE_MFGRID_V1",
+		{{.name = "remote_mfgrid_v1", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_u16_hex,
+		.id = { TS2_I2C_ENUM_REMOTE_MFGR_ID_LO_V1,
+			TS2_I2C_ENUM_REMOTE_MFGR_ID_HI_V1},
+		.num_ids = 2, .ro = 1},
+	[83] = {.debug_name = "REMOTE_MFGRID_V2",
+		{{.name = "remote_mfgrid_v2", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_u16_hex,
+		.id = { TS2_I2C_ENUM_REMOTE_MFGR_ID_LO,
+			TS2_I2C_ENUM_REMOTE_MFGR_ID_HI},
+		.num_ids = 2, .ro = 1},
+	[84] = {.debug_name = "REMOTE_PRODUCTID_V1",
+		{{.name = "remote_productid_v1", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_u16_hex,
+		.id = { TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_LO_V1,
+			TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_HI_V1},
+		.num_ids = 2, .ro = 1},
+	[85] = {.debug_name = "REMOTE_PRODUCTID_V2",
+		{{.name = "remote_productid_v2", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_u16_hex,
+		.id = { TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_LO,
+			TS2_I2C_ENUM_REMOTE_PRODUCT_TYPE_HI},
+		.num_ids = 2, .ro = 1},
+	[86] = {.debug_name = "REMOTE_SERNO_V1",
+		{{.name = "remote_serno_v1", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_serno_v1,
+		.id = { TS2_I2C_ENUM_REMOTE_SERNO_0, TS2_I2C_ENUM_REMOTE_SERNO_1,
+			TS2_I2C_ENUM_REMOTE_SERNO_2, TS2_I2C_ENUM_REMOTE_SERNO_3,
+			TS2_I2C_ENUM_REMOTE_SERNO_4, TS2_I2C_ENUM_REMOTE_SERNO_5},
+		.num_ids = 6, .ro = 1},
+	[87] = {.debug_name = "REMOTE_SERNO_V2",
+		{{.name = "remote_serno_v2", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_serno_v2,
+		.id = { TS2_I2C_ENUM_REMOTE_SERNO_0, TS2_I2C_ENUM_REMOTE_SERNO_1,
+			TS2_I2C_ENUM_REMOTE_SERNO_2, TS2_I2C_ENUM_REMOTE_SERNO_3,
+			TS2_I2C_ENUM_REMOTE_SERNO_4, TS2_I2C_ENUM_REMOTE_SERNO_5,
+			TS2_I2C_ENUM_REMOTE_SERNO_6, TS2_I2C_ENUM_REMOTE_SERNO_7},
+		.num_ids = 8, .ro = 1},
+	[88] = {.debug_name = "LOCAL_MFGRID",
+		{{.name = "local_mfgrid", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_u16_hex,
+		.id = { TS2_I2C_ENUM_MFGR_ID_LO, TS2_I2C_ENUM_MFGR_ID_HI},
+		.num_ids = 2, .ro = 1},
+	[89] = {.debug_name = "LOCAL_PRODUCTID",
+		{{.name = "local_productid", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_u16_hex,
+		.id = { TS2_I2C_ENUM_PRODUCT_TYPE_LO, TS2_I2C_ENUM_PRODUCT_TYPE_HI},
+		.num_ids = 2, .ro = 1},
+	[90] = {.debug_name = "LOCAL_SERNO",
+		{{.name = "local_serno", .mode = S_IRUGO},
+		.show = a6_generic_show, .store = NULL},
+		.format = format_serno_v2,
+		.id = { TS2_I2C_ENUM_SERNO_0, TS2_I2C_ENUM_SERNO_1,
+			TS2_I2C_ENUM_SERNO_2, TS2_I2C_ENUM_SERNO_3,
+			TS2_I2C_ENUM_SERNO_4, TS2_I2C_ENUM_SERNO_5,
+			TS2_I2C_ENUM_SERNO_6, TS2_I2C_ENUM_SERNO_7},
+			.num_ids = 8, .ro = 1},
 };
 
 
 struct device_attribute custom_devattr[] = {
 	{{.name = "a6_diag", .mode = S_IRUGO | S_IWUGO},
 	 .show = a6_diag_show, .store = a6_diag_store},
-	{{.name = "validate_cksum", .mode = S_IRUGO},
-	 .show = a6_val_cksum_show, .store = NULL},
+ 	{{.name = "validate_cksum", .mode = S_IRUGO},
+ 	 .show = a6_val_cksum_show, .store = NULL},
+};
+
+static enum power_supply_property a6_fish_battery_properties[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_NOW,
+};
+
+static enum power_supply_property a6_fish_power_properties[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+};
+
+static char *supply_list[] = {
+	"battery",
+};
+
+static int a6_fish_power_get_property(struct power_supply *psy,
+				   enum power_supply_property psp,
+				   union power_supply_propval *val);
+
+static int a6_fish_battery_get_property(struct power_supply *psy,
+				     enum power_supply_property psp,
+				     union power_supply_propval *val);
+
+static struct power_supply a6_fish_power_supplies[] = {
+	{
+		.name = "battery",
+		.type = POWER_SUPPLY_TYPE_BATTERY,
+		.properties = a6_fish_battery_properties,
+		.num_properties = ARRAY_SIZE(a6_fish_battery_properties),
+		.get_property = a6_fish_battery_get_property,
+	},
+	{
+		.name = "ac",
+		.type = POWER_SUPPLY_TYPE_MAINS,
+		.supplied_to = supply_list,
+		.num_supplicants = ARRAY_SIZE(supply_list),
+		.properties = a6_fish_power_properties,
+		.num_properties = ARRAY_SIZE(a6_fish_power_properties),
+		.get_property = a6_fish_power_get_property,
+	},
+	{
+		.name = "usb",
+		.type = POWER_SUPPLY_TYPE_USB,
+		.supplied_to = supply_list,
+		.num_supplicants = ARRAY_SIZE(supply_list),
+		.properties = a6_fish_power_properties,
+		.num_properties = ARRAY_SIZE(a6_fish_power_properties),
+		.get_property = a6_fish_power_get_property,
+	},
+#ifdef CONFIG_A6_ENABLE_DOCK_PS
+	{
+		.name = "dock",
+		.type = POWER_SUPPLY_TYPE_MAINS,
+		.supplied_to = supply_list,
+		.num_supplicants = ARRAY_SIZE(supply_list),
+		.properties = a6_fish_power_properties,
+		.num_properties = ARRAY_SIZE(a6_fish_power_properties),
+		.get_property = a6_fish_power_get_property,
+	},
+#endif
 };
 
 #ifdef A6_PQ
@@ -1218,13 +1520,7 @@ int32_t enq_a6_action_item(struct a6_device_state* state, struct a6_action_item*
 	complete(&state->aq_enq_complete);
 
 	// ** wait for action_item to be processed
-	do {
-		rc = wait_event_interruptible(ai->ai_waitq, ai->ai_complete);
-		if (rc < 0) {
-			printk(KERN_ERR "%s: wait on action_item complete interrupted\n", __func__);
-		}
-	} while(rc < 0);
-
+	a6_wait_event_ex(ai->ai_waitq, ai->ai_complete);
 	rc = *ai->ai_ret_code(ai->ai_payload);
 
 	return rc;
@@ -1267,7 +1563,7 @@ int32_t flush_a6_action_items(struct a6_device_state* state)
 		// set completion indicator
 		ai->ai_complete = 1;
 		// signal ai requestor
-		wake_up_interruptible(&ai->ai_waitq);
+		wake_up(&ai->ai_waitq);
 	}
 	mutex_unlock(&state->aq_mutex);
 
@@ -1290,6 +1586,7 @@ int32_t do_i2c_action_item(void* payload_param)
 	struct ai_i2c_payload* trf_data = (struct ai_i2c_payload*)payload_param;
 
 	trf_data->rc = i2c_transfer(trf_data->client->adapter, trf_data->msg, trf_data->num_msgs);
+	udelay(700);
 	if (trf_data->rc < 0) {
 		printk(KERN_ERR "%s: err code: %d\n", __func__, trf_data->rc);
 		goto err0;
@@ -1372,10 +1669,11 @@ int ai_dispatch_thread_fn(void* param)
 				if (ret_val) {
 					printk(KERN_ERR "%s: ai_do_action failed.\n", __func__);
 				}
+
 				// set completion indicator
 				ai->ai_complete = 1;
 				// signal ai requestor
-				wake_up_interruptible(&ai->ai_waitq);
+				wake_up(&ai->ai_waitq);
 			}
 			else {
 				A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: no ai.\n", __func__);
@@ -1432,8 +1730,8 @@ int32_t __a6_i2c_read_reg(struct i2c_client* client, const uint16_t* ids, uint32
 			struct a6_wake_ops* wake_ops = (struct a6_wake_ops*)state->plat_data->wake_ops;
 
 			A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR,
-				"%s: disabling periodic_wake and switching to force_wake\n",
-				__func__);
+			   	"%s: disabling periodic_wake and switching to force_wake\n",
+			   	__func__);
 
 			// periodic wake active: disable it and switch to force wake
 			if (wake_ops->disable_periodic_wake) {
@@ -1482,7 +1780,6 @@ int32_t __a6_i2c_read_reg(struct i2c_client* client, const uint16_t* ids, uint32
 #endif // A6_PQ
 #endif
 	//msleep(1);
-	udelay(700);
 #ifdef A6_I2C_PROFILE
 	{
 		end = ktime_get();
@@ -1567,6 +1864,8 @@ int32_t __a6_i2c_write_reg(struct i2c_client* client, const uint16_t* ids, uint3
 			if (wake_ops->force_wake) {
 				wake_ops->force_wake(wake_ops->data);
 			}
+
+			set_bit(FORCE_WAKE_ACTIVE_BIT, state->flags);
 		}
 	}
 	mutex_unlock(&state->a6_force_wake_mutex);
@@ -1601,7 +1900,6 @@ int32_t __a6_i2c_write_reg(struct i2c_client* client, const uint16_t* ids, uint3
 	ret = i2c_transfer(client->adapter, msg, num_ids);
 #endif // A6_PQ
 	//msleep(1);
-	udelay(700);
 #endif
 	if (ret < 0) {
 		printk(KERN_ERR "%s[0x%02x]: err code: %d\n", __func__, client->addr, ret);
@@ -1987,7 +2285,7 @@ int32_t format_accessory(const struct a6_device_state* state, const uint8_t* val
 	int32_t ret;
 
     ret = scnprintf(fmt_buffer, size_buffer, "%02X\n", val[0]);
-	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_INFO, "%s", fmt_buffer);
+ 	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_INFO, "%s", fmt_buffer);
 	return ret;
 }
 
@@ -1997,7 +2295,7 @@ int32_t format_comm_status(const struct a6_device_state* state, const uint8_t* v
 	int32_t ret;
 
     ret = scnprintf(fmt_buffer, size_buffer, "%02X\n", val[0]);
-	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_INFO, "%s", fmt_buffer);
+ 	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_INFO, "%s", fmt_buffer);
 	return ret;
 }
 
@@ -2199,11 +2497,32 @@ int32_t format_accessory_combo(const struct a6_device_state* state, const uint8_
 	return ret;
 }
 
-static ssize_t a6_generic_show(struct device *dev, struct device_attribute *attr, char *buf)
+int32_t format_serno_v1(const struct a6_device_state* state, const uint8_t* val,
+			       uint8_t* fmt_buffer, uint32_t size_buffer)
+{
+	int32_t ret;
+
+	ret = scnprintf(fmt_buffer, size_buffer, "%02x%02x%02x%02x%02x%02x\n",
+			val[0], val[1], val[2], val[3], val[4], val[5]);
+	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_INFO, "%s", fmt_buffer);
+	return ret;
+}
+
+int32_t format_serno_v2(const struct a6_device_state* state, const uint8_t* val,
+			uint8_t* fmt_buffer, uint32_t size_buffer)
+{
+	int32_t ret;
+
+	ret = scnprintf(fmt_buffer, size_buffer, "%02x%02x%02x%02x%02x%02x%02x%02x\n",
+			val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_INFO, "%s", fmt_buffer);
+	return ret;
+}
+
+static ssize_t a6_get_reg_vals(struct device *dev, struct device_attribute *attr, uint8_t *vals, unsigned num_vals)
 {
 	struct i2c_client *client = to_i2c_client(dev);
-	int32_t ret = 0, i = 0;
-	uint8_t vals[id_size];
+	int32_t ret = 0;
 	struct a6_register_desc* reg_desc;
 	struct a6_device_state* state = i2c_get_clientdata(client);
 
@@ -2227,7 +2546,7 @@ static ssize_t a6_generic_show(struct device *dev, struct device_attribute *attr
 		mutex_unlock(&state->dev_mutex);
 		A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: about to wait for device non-busy...\n", __func__);
 
-		// bootload bit set? wait to be cleared (at least 3 mins: in jiffies)
+		// bootload bit set? wait to be cleared (at least 5 mins: in jiffies)
 		ret = wait_event_interruptible_timeout(state->dev_busyq,
 				!test_bit(BOOTLOAD_ACTIVE_BIT, state->flags), 300*HZ);
 		if (!ret) {
@@ -2252,11 +2571,37 @@ static ssize_t a6_generic_show(struct device *dev, struct device_attribute *attr
 
 	reg_desc = container_of(attr, struct a6_register_desc, dev_attr);
 
-	memset(vals, 0, sizeof(vals));
+	memset(vals, 0, sizeof(vals[0])*num_vals);
 	ret = a6_i2c_read_reg(client, reg_desc->id, reg_desc->num_ids, vals);
-	if (ret < 0) {
-		goto err0;
+
+	// reset busy state
+	mutex_lock(&state->dev_mutex);
+	// decrement busy refcount
+	if (state->busy_count) {
+		state->busy_count--;
 	}
+	if (!state->busy_count) {
+		clear_bit(DEVICE_BUSY_BIT, state->flags);
+	}
+	mutex_unlock(&state->dev_mutex);
+	wake_up_interruptible(&state->dev_busyq);
+
+	return ret;
+}
+
+static ssize_t a6_generic_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int32_t ret = 0, i = 0;
+	uint8_t vals[id_size];
+	struct a6_register_desc* reg_desc;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct a6_device_state* state = i2c_get_clientdata(client);
+
+	ret = a6_get_reg_vals(dev, attr, vals, id_size);
+
+	if (ret < 0) return ret;
+
+	reg_desc = container_of(attr, struct a6_register_desc, dev_attr);
 
 	if (reg_desc->format) {
 		ret = reg_desc->format(state, vals, buf, PAGE_SIZE);
@@ -2300,18 +2645,77 @@ static ssize_t a6_generic_show(struct device *dev, struct device_attribute *attr
 	}
 #endif
 
-err0:
-	// reset busy state
-	mutex_lock(&state->dev_mutex);
-	// decrement busy refcount
-	if (state->busy_count) {
-		state->busy_count--;
+	return ret;
+}
+
+static ssize_t a6_reg_get(struct device *dev, unsigned regnum, void *buf)
+{
+	int32_t ret = 0;
+	uint8_t vals[id_size];
+	struct i2c_client *client = to_i2c_client(dev);
+	struct a6_device_state* state = i2c_get_clientdata(client);
+	struct device_attribute *attr = &a6_register_desc_arr[regnum].dev_attr;
+	int32_t rsense = (int32_t)state->cached_rsense_val;
+
+	ret = a6_get_reg_vals(dev, attr, vals, id_size);
+
+	if (ret < 0) {
+		printk(KERN_ERR "%s: a6_get_reg_vals failed for regnum %u\n",
+				__func__, regnum);
+		return ret;
 	}
-	if (!state->busy_count) {
-		clear_bit(DEVICE_BUSY_BIT, state->flags);
+
+	ret = 0;
+
+	switch (regnum) {
+		case A6_REG_TS2_I2C_FLAGS_2:
+			{
+				uint32_t *out_val = (uint32_t*)buf;
+				*out_val = *vals;
+			}
+			break;
+		case A6_REG_TS2_I2C_BAT_RARC:
+			{
+				int32_t *out_val = (int32_t*)buf;
+				*out_val = *vals;
+			}
+			break;
+		case A6_REG_TS2_I2C_BAT_AVG_CUR_LSB_MSB:
+		case A6_REG_TS2_I2C_BAT_CUR_LSB_MSB:
+			{
+				int32_t *out_val = (int32_t*)buf;
+				*out_val = *(int16_t*)vals;
+				*out_val = (*out_val * 3125) / 2 / rsense;
+			}
+			break;
+		case A6_REG_TS2_I2C_BAT_VOLT_LSB_MSB:
+			{
+				int32_t *out_val = (int32_t*)buf;
+				*out_val = *(int16_t*)vals;
+				*out_val = (*out_val >> 5) * 4800;
+			}
+			break;
+		case A6_REG_TS2_I2C_BAT_FULL40_LSB_MSB:
+		case A6_REG_TS2_I2C_BAT_COULOMB_LSB_MSB:
+			{
+				int32_t *out_val = (int32_t*)buf;
+				*out_val = *(int16_t*)vals;
+				*out_val = (*out_val * 6250) / rsense;
+			}
+			break;
+		case A6_REG_TS2_I2C_BAT_TEMP_LSB_MSB:
+			{
+				int32_t *out_val = (int32_t*)buf;
+				int8_t temp_val = ((int8_t*)vals)[1];
+				*out_val = temp_val * 10;
+			}
+			break;
+		default:
+			{
+				printk(KERN_ERR "%s: Invalid register %u\n", __func__, regnum);
+				ret = -EINVAL;
+			}
 	}
-	mutex_unlock(&state->dev_mutex);
-	wake_up_interruptible(&state->dev_busyq);
 
 	return ret;
 }
@@ -2354,7 +2758,7 @@ static ssize_t a6_generic_store(struct device *dev, struct device_attribute *att
 		mutex_unlock(&state->dev_mutex);
 		A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: about to wait for device non-busy...\n", __func__);
 
-		// bootload bit set? wait to be cleared (at least 3 mins: in jiffies)
+		// bootload bit set? wait to be cleared (at least 5 mins: in jiffies)
 		ret = wait_event_interruptible_timeout(state->dev_busyq,
 				!test_bit(BOOTLOAD_ACTIVE_BIT, state->flags), 300*HZ);
 		if (!ret) {
@@ -2495,9 +2899,9 @@ enum {
 static ssize_t a6_val_cksum_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
-	int32_t rc = 0;
+	int32_t rc = 0, reloop = 0, failed = 0;
 	struct a6_device_state* state = i2c_get_clientdata(client);
-	uint16_t cksum1, cksum2, cksum_cycles;
+	uint16_t cksum1, cksum2, cksum_cycles, cksum_errors;
 	struct a6_register_desc *reg_desc;
 	uint8_t vals[id_size];
 
@@ -2518,9 +2922,9 @@ static ssize_t a6_val_cksum_show(struct device *dev, struct device_attribute *at
 
 		A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: about to wait for device non-busy...\n", __func__);
 
-		// busy bit set? wait to be cleared (at least 3 seconds: in jiffies)
+		// busy bit set? wait to be cleared (at least 5 minutes: in jiffies)
 		rc = wait_event_interruptible_timeout(state->dev_busyq,
-				!test_bit(DEVICE_BUSY_BIT, state->flags), 3*HZ);
+				!test_bit(DEVICE_BUSY_BIT, state->flags), 300*HZ);
 		if (!rc) {
 			printk(KERN_ERR "%s: wait on device busy timed-out/interrupted\n", __func__);
 			// reset busy state
@@ -2595,20 +2999,48 @@ static ssize_t a6_val_cksum_show(struct device *dev, struct device_attribute *at
 			break;
 		}
 		cksum2 = vals[0] | vals[1] << 8;
-	} while (0);
+
+		/* read cksum error counter */
+		reg_desc = &a6_register_desc_arr[81];
+		memset(vals, 0, sizeof(vals));
+		rc = a6_i2c_read_reg(state->i2c_dev, reg_desc->id, reg_desc->num_ids, vals);
+		if (rc < 0) {
+			printk(KERN_ERR "%s: error reading reg: %s, ids: 0x%x 0x%x\n",
+			       __func__, reg_desc->debug_name, reg_desc->id[0], reg_desc->id[1]);
+			break;
+		}
+		cksum_errors = vals[0] | vals[1] << 8;
+
+		/* validate cksum */
+		if (reloop || !cksum1 || !cksum2 || (cksum1 != cksum2)) {
+			printk(KERN_ERR "A6 checksum (%s) validation failure:\n"
+					"cksum1: 0x%02hx; cksum2: 0x%02hx; cksum_cycles: 0x%02hx;"
+					" cksum_errors: 0x%02hx\n",
+					(!reloop) ? "first-stage" : "second-stage",
+					cksum1, cksum2, cksum_cycles, cksum_errors);
+			if (reloop) {
+				reloop--;
+				failed = 1;
+			}
+			else {
+				reloop++;
+			}
+		}
+	} while (reloop);
 
 	if (rc < 0) {
 		printk(KERN_ERR "%s: checksum retrieval enountered i2c errors: "
 				"fallback to sbw(jtag) access.\n", __func__);
 		get_checksum_data_sbw((struct a6_sbw_interface*)state->plat_data->sbw_ops, &cksum1,
-				       &cksum2, &cksum_cycles, NULL);
+				       &cksum2, &cksum_cycles, &cksum_errors);
 	}
 
-	printk(KERN_ERR "%s: cksum1: 0x%02hx; cksum2: 0x%02hx; cksum_cycles: 0x%02hx\n",
-	       __func__, cksum1, cksum2, cksum_cycles);
-
 	/* validate cksum */
-	if (!cksum1 || !cksum2 || !cksum_cycles || (cksum1 != cksum2)) {
+	if (failed || !cksum1 || !cksum2 || (cksum1 != cksum2)) {
+		printk(KERN_ERR "A6 checksum validation failed:\n"
+				"cksum1: 0x%02hx; cksum2: 0x%02hx; cksum_cycles: 0x%02hx;"
+				" cksum_errors: 0x%02hx\n",
+				cksum1, cksum2, cksum_cycles, cksum_errors);
 		rc = snprintf(buf, PAGE_SIZE, "%d\n", 0);
 	}
 	else {
@@ -2670,9 +3102,9 @@ static ssize_t a6_diag_store(struct device *dev, struct device_attribute *attr, 
 
 		A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: about to wait for device non-busy...\n", __func__);
 
-		// busy bit set? wait to be cleared (at least 3 seconds: in jiffies)
+		// busy bit set? wait to be cleared (at least 5 minutes: in jiffies)
 		rc = wait_event_interruptible_timeout(state->dev_busyq,
-				!test_bit(DEVICE_BUSY_BIT, state->flags), 3*HZ);
+				!test_bit(DEVICE_BUSY_BIT, state->flags), 300*HZ);
 		if (!rc) {
 			printk(KERN_ERR "%s: wait on device busy timed-out/interrupted\n", __func__);
 			// reset busy state
@@ -2712,8 +3144,17 @@ static ssize_t a6_diag_store(struct device *dev, struct device_attribute *attr, 
 	mutex_unlock(&state->dev_mutex);
 
 	if (true == skip) goto err0;
-
+	
 	if (ACTIVATE_EXTRACT == action_i) {
+		// reset force-wake state to always force wake on first i2c txn
+		// after pmem extraction
+		del_timer(&state->a6_force_wake_timer);
+		mutex_lock(&state->a6_force_wake_mutex);
+		if (test_bit(CAP_PERIODIC_WAKE, state->flags)) {
+			clear_bit(FORCE_WAKE_ACTIVE_BIT, state->flags);
+		}
+		mutex_unlock(&state->a6_force_wake_mutex);
+
 		// start pmem extract
 		printk(KERN_ERR "%s: starting ttf_extract.\n", __func__);
 		rc = ttf_extract_fw_sbw((struct a6_sbw_interface*)state->plat_data->sbw_ops);
@@ -2721,7 +3162,7 @@ static ssize_t a6_diag_store(struct device *dev, struct device_attribute *attr, 
 			printk(KERN_ERR "Failed to ttf_extract a6 pmem.\n");
 			goto err0;
 		}
-		else {
+		else {	
 			printk(KERN_ERR "A6: Completed ttf_extract a6 pmem.\n");
 			// wait for the A6 to boot...
 			msleep(3000);
@@ -2763,7 +3204,7 @@ static ssize_t a6_diag_show(struct device *dev, struct device_attribute *attr, c
 	int32_t rc = 0;
 	struct a6_device_state* state = i2c_get_clientdata(client);
 
-
+	
 	mutex_lock(&state->dev_mutex);
 	if (test_bit(EXTRACT_INITIATED, state->flags)) {
 		rc = snprintf(buf, PAGE_SIZE, "%s\n", activation_strlist[ACTIVATE_EXTRACT]);
@@ -3043,6 +3484,8 @@ static long a6_ioctl(struct file *file,
 			if (t_params.ret_code) {
 				printk(KERN_ERR "A6: Failed to completed flashing sequence. ret: %d\n",
 				       t_params.ret_code);
+				// propagate error to caller...
+				rc = t_params.ret_code;
 			}
 			else {
 				printk(KERN_ERR "A6: Completed flashing sequence.\n");
@@ -3142,6 +3585,7 @@ static ssize_t a6_read(struct file *file, char __user *buf, size_t count, loff_t
 	int32_t miss_count, rd_count;
 	//struct a2a_dgram_hdr hdr;
 	uint32_t start_time;
+	uint8_t elt_val = 0, prev_byte;
 
 	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: enter\n", __func__);
 
@@ -3186,6 +3630,7 @@ static ssize_t a6_read(struct file *file, char __user *buf, size_t count, loff_t
 
 	rd_count = 0;
 	miss_count = 0;
+	prev_byte = 0;
 	do {
 		/* read comm status */
 		reg_desc_comm_status = &a6_register_desc_arr[63];
@@ -3224,7 +3669,29 @@ static ssize_t a6_read(struct file *file, char __user *buf, size_t count, loff_t
 
 		A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: read byte: %d successfully.\n",
 			   __func__, rd_count);
-		*state->a2a_rp = vals[0];
+
+		if (a6_t2s_dup_correct) {
+			if ((prev_byte & 0x80) ^ (vals[0] & 0x80)) {
+				prev_byte = vals[0];
+				if (vals[0] & 0x80) {
+					elt_val = _convert_hex_char_to_decimal(vals[0] & 0x7f) << 4;
+					continue;
+				}
+				else {
+					elt_val |= (_convert_hex_char_to_decimal(vals[0]) & 0x0f);
+				}
+			}
+			else {
+				printk(KERN_ERR "%s: t2s duplicate detected; char: 0x%02x.\n",
+				       __func__, vals[0]);
+				continue;
+			}
+		}
+		else {
+			elt_val = vals[0];
+		}
+
+		*state->a2a_rp = elt_val;
 		state->a2a_rp++;
 		rd_count++;
 	} while (rd_count < count);
@@ -3242,7 +3709,8 @@ static ssize_t a6_read(struct file *file, char __user *buf, size_t count, loff_t
 		}
 		rc = rd_count;
 		diff_time = (long)jiffies - (long)start_time;
-		printk(KERN_ERR "%s: elapsed time: %ld ms\n", __func__, diff_time * 1000/HZ);
+		printk(KERN_ERR "%s: elapsed time: %ld ms; count: %u\n",
+		       __func__, diff_time * 1000/HZ, rd_count);
 	}
 
 
@@ -3263,6 +3731,8 @@ static ssize_t a6_write(struct file *file, const char __user *buf, size_t count,
 	int32_t miss_count, wr_count;
 	//struct a2a_dgram_hdr hdr;
 	uint32_t start_time;
+	uint8_t elt_buf[2], *elt_bufp = NULL;
+	int elt_bufsize;
 
 	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: enter\n", __func__);
 
@@ -3321,6 +3791,7 @@ static ssize_t a6_write(struct file *file, const char __user *buf, size_t count,
 
 	wr_count = 0;
 	miss_count = 0;
+	elt_bufsize = 0;
 	do {
 		/* read comm status */
 		reg_desc_comm_status = &a6_register_desc_arr[63];
@@ -3347,20 +3818,35 @@ static ssize_t a6_write(struct file *file, const char __user *buf, size_t count,
 
 		/* write tx data */
 		reg_desc_comm_rxtx = &a6_register_desc_arr[64];
+		if (!elt_bufsize) {
+			if (a6_t2s_dup_correct) {
+				elt_bufsize = 2;
+				sprintf(elt_buf, "%02x", *state->a2a_wp);
+				elt_buf[0] |= 0x80;
+			}
+			else {
+				elt_bufsize = 1;
+				elt_buf[0] = *state->a2a_wp;
+			}
+			elt_bufp = elt_buf;
+		}
 		rc = a6_i2c_write_reg(state->i2c_dev, reg_desc_comm_rxtx->id,
-				       reg_desc_comm_rxtx->num_ids, state->a2a_wp);
+				       reg_desc_comm_rxtx->num_ids, elt_bufp);
 		if (rc < 0) {
 			printk(KERN_ERR "%s: error writing reg: %s, id: 0x%x\n",
 			__func__, reg_desc_comm_rxtx->debug_name, reg_desc_comm_rxtx->id[0]);
 			rc = -EIO;
 			goto err0;
 		}
+		elt_bufp++;
+		elt_bufsize--;
 
-		A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: written byte: %d successfully.\n",
-			   __func__, wr_count);
-		state->a2a_wp++;
-		wr_count++;
-
+		if (!elt_bufsize) {
+			A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: written byte: %d successfully.\n",
+				   __func__, wr_count);
+			state->a2a_wp++;
+			wr_count++;
+		}
 	} while (wr_count < count);
 
 	if (!wr_count) {
@@ -3373,7 +3859,8 @@ static ssize_t a6_write(struct file *file, const char __user *buf, size_t count,
 		long diff_time;
 		rc = wr_count;
 		diff_time = (long)jiffies - (long)start_time;
-		printk(KERN_ERR "%s: elapsed time: %ld ms\n", __func__, diff_time * 1000/HZ);
+		printk(KERN_ERR "%s: elapsed time: %ld ms; count: %u\n", __func__,
+		       diff_time * 1000/HZ, wr_count);
 	}
 
 
@@ -3395,7 +3882,7 @@ struct file_operations a6_fops = {
 	.read    = a6_read,
 	.write    = a6_write,
 	.poll    = a6_poll,
-	.compat_ioctl   = a6_ioctl,
+	.unlocked_ioctl   = a6_ioctl,
 	.open    = a6_open,
 	.release = a6_close,
 };
@@ -3406,7 +3893,6 @@ struct file_operations a6_fops = {
 static irqreturn_t a6_irq(int irq, void *dev_id)
 {
 	struct a6_device_state* state = (struct a6_device_state *)dev_id;
-	//int rc;
 
 	a6_tp_irq_count++;
 #if defined PROFILE_USAGE
@@ -3422,8 +3908,12 @@ static irqreturn_t a6_irq(int irq, void *dev_id)
 
 	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: entry.\n", __func__);
 
-	queue_work(state->ka6d_workqueue, &state->a6_irq_work);
-
+	if (test_bit(IS_SUSPENDED, state->flags)) {
+		set_bit(INT_PENDING, state->flags);
+	} else {
+		queue_work(state->ka6d_workqueue, &state->a6_irq_work);
+	}
+	
 	return IRQ_HANDLED;
 }
 
@@ -3431,8 +3921,10 @@ void a6_irq_work_handler(struct work_struct *work)
 {
 	struct a6_device_state* state =
 			container_of(work, struct a6_device_state, a6_irq_work);
-	struct a6_register_desc *reg_desc_status3, *reg_desc_status2, *reg_desc_flag2;
-	uint8_t vals[id_size], reg_val_status3 = 0, reg_val_status2 = 0, reg_val_flag2 = 0;
+	struct a6_register_desc *reg_desc_status3, *reg_desc_status2;
+	uint8_t vals[id_size], reg_val_status3 = 0, reg_val_status2 = 0;
+	bool charge_source_changed = false;
+	bool battery_changed = false;
 	int32_t ret = 0;
 	char *envp[] = {
 		[0] = "A6_ACTION=EMERGENCY_RESET_NOTIFY",
@@ -3492,13 +3984,15 @@ void a6_irq_work_handler(struct work_struct *work)
 		mutex_lock(&state->dev_mutex);
 	}
 
+	/* increment busy refcount */
+	state->busy_count++;
+
 	// done with flags: exit critsec
 	mutex_unlock(&state->dev_mutex);
 
 	/* determine irq cause */
 	reg_desc_status3 = &a6_register_desc_arr[7];
 	reg_desc_status2 = &a6_register_desc_arr[6];
-	reg_desc_flag2 = &a6_register_desc_arr[31];
 
 	/* (1) read int_status3: emergency reset and charge-source change */
 	memset(vals, 0, sizeof(vals));
@@ -3519,16 +4013,6 @@ void a6_irq_work_handler(struct work_struct *work)
 		goto err0;
 	}
 	reg_val_status2 = vals[0];
-
-	/* (2) read flag2 */
-	memset(vals, 0, sizeof(vals));
-	ret = a6_i2c_read_reg(state->i2c_dev, reg_desc_flag2->id, reg_desc_flag2->num_ids, vals);
-	if (ret < 0) {
-		printk(KERN_ERR "%s: error reading reg: %s, id: 0x%x\n",
-		       __func__, reg_desc_flag2->debug_name, reg_desc_flag2->id[0]);
-		goto err0;
-	}
-	reg_val_flag2 = vals[0];
 
 	/* (3) now clear all status bits: this "releases" the irq line early */
 	if (reg_val_status3) {
@@ -3596,20 +4080,12 @@ void a6_irq_work_handler(struct work_struct *work)
 		if (reg_val_status3 & TS2_I2C_INT_3_FLAGS_CHANGE) {
 			A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: charger-source change detected.\n",
 				   __func__);
-			printk(KERN_ERR"%s: charger-source change detected, reg_val_flag2= %x\n",
-				   __func__, reg_val_flag2);
-			if ((reg_val_flag2 & (1 << 3)) && !(reg_val_flag2 & (1 << 4))) {
-					max8903_charger_connected(1, POWER_SUPPLY_TYPE_MAINS);
-					max8903_charger_draw_current(1400);
-			} else {
-				if (!(reg_val_flag2 & (1 << 3)) && !(reg_val_flag2 & (1 << 4))) {
-					max8903_charger_connected(0, POWER_SUPPLY_TYPE_MAINS);
-				}
-			}
+
 			/* next, unblock task on charger_source_notify node */
 			//sysfs_notify_dirent(state->notify_nodes[DIRENT_CHG_SRC_NOTIFY]);
 			/* Send uevent */
 			kobject_uevent_env(&state->i2c_dev->dev.kobj, KOBJ_CHANGE, &envp[4]);
+			charge_source_changed = true;
 		}
 
 		/* log threshold change? */
@@ -3631,6 +4107,7 @@ void a6_irq_work_handler(struct work_struct *work)
 
 			/* Send uevent */
 			kobject_uevent_env(&state->i2c_dev->dev.kobj, KOBJ_CHANGE, &envp[10]);
+			battery_changed = true;
 		}
 
 		/* battery voltage low critical? */
@@ -3640,6 +4117,7 @@ void a6_irq_work_handler(struct work_struct *work)
 
 			/* Send uevent */
 			kobject_uevent_env(&state->i2c_dev->dev.kobj, KOBJ_CHANGE, &envp[12]);
+			battery_changed = true;
 		}
 
 		/* battery temp high critical? */
@@ -3667,6 +4145,7 @@ void a6_irq_work_handler(struct work_struct *work)
 
 			/* Send uevent */
 			kobject_uevent_env(&state->i2c_dev->dev.kobj, KOBJ_CHANGE, &envp[8]);
+			battery_changed = true;
 		}
 
 		/* battery low percent warn1? */
@@ -3676,11 +4155,34 @@ void a6_irq_work_handler(struct work_struct *work)
 
 			/* Send uevent */
 			kobject_uevent_env(&state->i2c_dev->dev.kobj, KOBJ_CHANGE, &envp[6]);
+			battery_changed = true;
 		}
 	}
 
 err0:
-	clear_bit(DEVICE_BUSY_BIT, state->flags);
+	/* decrement busy refcount */
+	if (state->busy_count)
+		state->busy_count--;
+	if (!state->busy_count)
+		clear_bit(DEVICE_BUSY_BIT, state->flags);
+
+	if (charge_source_changed) {
+		a6_dock_update_state(state);
+	}
+	if (state->plat_data->power_supply_connected == 1 && batt_state != NULL) {
+		if (battery_changed) {
+			power_supply_changed(&a6_fish_power_supplies[0]);
+		}
+		if (charge_source_changed) {
+			power_supply_changed(&a6_fish_power_supplies[1]);
+			power_supply_changed(&a6_fish_power_supplies[2]);
+#ifdef CONFIG_A6_ENABLE_DOCK_PS
+			power_supply_changed(&a6_fish_power_supplies[3]);
+#endif
+			a6_update_connected_ps();
+		}
+	}
+
 	A6_DPRINTK(A6_DEBUG_VERBOSE, KERN_ERR, "%s: Visited\n", __func__);
 }
 
@@ -3842,9 +4344,9 @@ void a6_force_wake_work_handler(struct work_struct *work)
 	start_last_a6_activity = 0;
 
 	// force A6 sleep and switch back to periodic wake...
-	// * timer may be scheduled before we clear FORCE_WAKE_ACTIVE_BIT and
-	//   hence will result in the callback being invoked with
-	//   FORCE_WAKE_ACTIVE_BIT not cleared. We just ignore this case...
+	// * timer may be scheduled just after we clear FORCE_WAKE_ACTIVE_BIT 
+	//   and hence will result in the callback being invoked with
+	//   FORCE_WAKE_ACTIVE_BIT cleared. We just ignore this case...
 	mutex_lock(&state->a6_force_wake_mutex);
 	if (!test_bit(DEVICE_BUSY_BIT, state->flags)) {
 		if (test_bit(FORCE_WAKE_ACTIVE_BIT, state->flags)) {
@@ -3926,7 +4428,7 @@ static ssize_t a6_pmem_read(struct file *file, char __user *buf, size_t count, l
 	/* get state */
 	state = container_of(file->f_op, struct a6_device_state, fops);
 	rc = ttf_image_read(buf, count, ppos);
-
+	
 	return rc;
 }
 
@@ -3937,41 +4439,407 @@ struct file_operations a6_pmem_fops = {
 	.release = a6_pmem_close,
 };
 
+static int a6_fish_battery_get_percent(struct device *dev)
+{
+	int temp_val = 0;
 
+	a6_reg_get (dev, A6_REG_TS2_I2C_BAT_RARC, &temp_val);
 
-#if defined(CONFIG_A6_BATTERY)
-void a6_battery_init(struct i2c_client *a6_i2c_client);
+#if defined(CONFIG_A6_BATTERY_SCALED_MIN) && CONFIG_A6_BATTERY_SCALED_MIN != 0
+	temp_val = (temp_val - CONFIG_A6_BATTERY_SCALED_MIN) * 100
+				/ (100 - CONFIG_A6_BATTERY_SCALED_MIN);
+	if (temp_val < 0) temp_val = 0;
 #endif
+
+	return temp_val;
+}
+
+static unsigned a6_calc_connected_ps(void)
+{
+	struct power_supply *psy;
+	struct a6_device_state *state;
+	unsigned int temp_val = 0;
+	unsigned connected = 0;
+
+	psy = &a6_fish_power_supplies[0];
+
+	if (!(psy->dev)) {
+		printk(KERN_ERR "%s: psy->dev is NULL\n", __func__);
+		return 0;
+	}
+	if (!(psy->dev->parent)) {
+		printk(KERN_ERR "%s: psy->dev->parent is NULL\n", __func__);
+		return 0;
+	}
+
+	state = (struct a6_device_state*)dev_get_drvdata(psy->dev->parent);
+
+	a6_reg_get (psy->dev->parent, A6_REG_TS2_I2C_FLAGS_2, &temp_val);
+
+	if (state->otg_chg_type == USB_CHG_TYPE__WALLCHARGER) {
+		connected |= MAX8903B_CONNECTED_PS_AC;
+	}
+
+	if (state->otg_chg_type == USB_CHG_TYPE__SDP
+			&& (temp_val & TS2_I2C_FLAGS_2_WIRED_CHARGE)) {
+		/* NOTE: USB will not show as connected if DOCK is connected */
+		connected |= MAX8903B_CONNECTED_PS_USB;
+	}
+
+	if(temp_val & TS2_I2C_FLAGS_2_PUCK_CHARGE) {
+		connected |= MAX8903B_CONNECTED_PS_DOCK;
+	}
+
+	return connected;
+}
+
+static void a6_update_connected_ps()
+{
+	unsigned connected = a6_calc_connected_ps();
+
+	printk(KERN_INFO "%s: ac=%d usb=%d dock=%d\n", __func__,
+			(connected & MAX8903B_CONNECTED_PS_AC) ? 1 : 0,
+			(connected & MAX8903B_CONNECTED_PS_USB) ? 1 : 0,
+			(connected & MAX8903B_CONNECTED_PS_DOCK) ? 1 : 0);
+
+	max8903b_set_connected_ps(connected);
+	a6_last_ps_connect = (long)jiffies;
+}
+
+static int a6_fish_power_get_property(struct power_supply *psy,
+				   enum power_supply_property psp,
+				   union power_supply_propval *val)
+{
+	unsigned connected;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		connected = a6_calc_connected_ps();
+
+		if (
+				(psy->type == POWER_SUPPLY_TYPE_MAINS
+					&& (connected & MAX8903B_CONNECTED_PS_AC)
+#ifdef CONFIG_A6_ENABLE_DOCK_PS
+					&& !(connected & MAX8903B_CONNECTED_PS_DOCK)
+					&& !strcmp(psy->name, "ac")
+#endif
+					)
+						||
+				(psy->type == POWER_SUPPLY_TYPE_MAINS
+				 	&& (connected & MAX8903B_CONNECTED_PS_DOCK)
+#ifdef CONFIG_A6_ENABLE_DOCK_PS
+					&& !strcmp(psy->name, "dock")
+#endif
+					)
+						||
+				(psy->type == POWER_SUPPLY_TYPE_USB 
+				 	&& (connected & MAX8903B_CONNECTED_PS_USB)
+				 	&& !(connected & MAX8903B_CONNECTED_PS_DOCK)
+					)
+				) {
+			val->intval = 1;
+		} else {
+			val->intval = 0;
+		}
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+
+#define A6_BATT_STATS_DELAY (msecs_to_jiffies (15*1000))
+static int a6_fish_battery_get_property(struct power_supply *psy,
+				     enum power_supply_property psp,
+				     union power_supply_propval *val)
+{
+	int temp_val = 0;
+	unsigned connected;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		if (a6_fish_battery_get_percent(psy->dev->parent) == 100) {
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+		} else if (a6_last_ps_connect &&
+				jiffies > a6_last_ps_connect + A6_BATT_STATS_DELAY) {
+			a6_reg_get (psy->dev->parent, 
+					A6_REG_TS2_I2C_BAT_AVG_CUR_LSB_MSB, &temp_val);
+			if (temp_val > 0) {
+				val->intval = POWER_SUPPLY_STATUS_CHARGING;
+			} else {
+				val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+			}
+		} else {
+			connected = a6_calc_connected_ps();
+			if (connected && !(connected == MAX8903B_CONNECTED_PS_USB)) {
+				val->intval = POWER_SUPPLY_STATUS_CHARGING;
+			} else {
+				val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+			}
+		}
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+#if 0
+		/* NOTE: *_BAT_STATUS not supported by a6_reg_get yet */
+		a6_reg_get(psy->dev->parent, A6_REG_TS2_I2C_BAT_STATUS, &temp_uval);
+#endif
+		// TODO: parse temps and set OVERHEAT, parse "age" and set DEAD */
+
+		val->intval = POWER_SUPPLY_HEALTH_GOOD;
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		val->intval = 1;
+		break;
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		val->intval = a6_fish_battery_get_percent(psy->dev->parent);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		a6_reg_get(psy->dev->parent, 
+				A6_REG_TS2_I2C_BAT_CUR_LSB_MSB, &temp_val);
+		val->intval = temp_val;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		a6_reg_get (psy->dev->parent,
+			A6_REG_TS2_I2C_BAT_VOLT_LSB_MSB, &temp_val);
+		val->intval = temp_val;
+		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		a6_reg_get (psy->dev->parent,
+			A6_REG_TS2_I2C_BAT_TEMP_LSB_MSB, &temp_val);
+		val->intval = temp_val;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		a6_reg_get (psy->dev->parent,
+			A6_REG_TS2_I2C_BAT_FULL40_LSB_MSB, &temp_val);
+		val->intval = temp_val;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_NOW:
+		a6_reg_get (psy->dev->parent,
+			A6_REG_TS2_I2C_BAT_COULOMB_LSB_MSB, &temp_val);
+		val->intval = temp_val;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+void a6_charger_event (enum chg_type otg_chg_type)
+{
+	if (batt_state) {
+		batt_state->otg_chg_type = otg_chg_type;
+
+		power_supply_changed(&a6_fish_power_supplies[1]);
+		power_supply_changed(&a6_fish_power_supplies[2]);
+#ifdef CONFIG_A6_ENABLE_DOCK_PS
+		power_supply_changed(&a6_fish_power_supplies[3]);
+#endif
+		a6_update_connected_ps();
+	}
+	return;
+}
+EXPORT_SYMBOL (a6_charger_event);
+
+#define A6_BATT_HB_PERIOD (msecs_to_jiffies (5*60*1000))
+#define A6_INIT_CONNECTED_PS_DELAY (msecs_to_jiffies (60*1000))
+static void a6_battery_heartbeat(struct work_struct *a6_battery_work)
+{
+	int percent = 0;
+
+	struct delayed_work *temp_charge_work =
+			container_of (a6_battery_work, struct delayed_work, work);
+	struct a6_device_state* state =
+			container_of(temp_charge_work, struct a6_device_state, charge_work);
+
+	if (state->stop_heartbeat)
+		return;
+
+	if ( (percent = a6_fish_battery_get_percent(&state->i2c_dev->dev))
+			!= state->last_percent){
+
+		state->last_percent = percent;
+		power_supply_changed(&a6_fish_power_supplies[0]);
+	}
+
+	if (!state->stop_heartbeat)
+		schedule_delayed_work(&state->charge_work,
+						A6_BATT_HB_PERIOD);
+}
+
+static void a6_init_connected_ps(struct work_struct *work)
+{
+	a6_update_connected_ps();
+}
+
+static int a6_fish_battery_probe(struct a6_device_state *state)
+{
+	int i;
+	int rc = 0;
+	struct i2c_client *client = state->i2c_dev;
+
+	/* init power supplier framework */
+	for (i = 0; i < ARRAY_SIZE(a6_fish_power_supplies); i++) {
+	
+		rc = power_supply_register(&client->dev, &a6_fish_power_supplies[i]);
+		if (rc)
+			pr_err("%s: Failed to register power supply (%d)\n",
+			       __func__, rc);
+	}
+
+	INIT_DELAYED_WORK(&state->charge_work, a6_battery_heartbeat);
+	schedule_delayed_work(&state->charge_work, A6_BATT_HB_PERIOD);
+
+	INIT_DELAYED_WORK(&state->init_connected_ps_work, a6_init_connected_ps);
+	schedule_delayed_work(&state->init_connected_ps_work, A6_INIT_CONNECTED_PS_DELAY);
+
+	return rc;
+}
+
+
+static int a6_fish_battery_remove(struct a6_device_state *state)
+{
+	int i;
+
+	state->stop_heartbeat = true;
+	cancel_delayed_work_sync(&state->charge_work);
+
+	/* init power supplier framework */
+	for (i = 0; i < ARRAY_SIZE(a6_fish_power_supplies); i++) {
+		power_supply_unregister(&a6_fish_power_supplies[i]);
+	}
+
+	return 0;
+}
+
+static int a6_fish_battery_suspend (struct a6_device_state *state)
+{
+
+	if (state->plat_data->power_supply_connected == 1 &&
+			delayed_work_pending(&state->charge_work)) {
+		state->stop_heartbeat = true;
+		smp_mb();
+		cancel_delayed_work_sync(&state->charge_work);
+	}
+
+	return 0;
+}
+
+static int a6_fish_battery_resume (struct a6_device_state *state)
+{
+	if (state->plat_data->power_supply_connected == 1) {
+		state->stop_heartbeat = false;
+		schedule_delayed_work(&state->charge_work,
+				A6_BATT_HB_PERIOD);
+
+		power_supply_changed(&a6_fish_power_supplies[0]);
+	}
+	return 0;
+}
+
+static ssize_t a6_dock_print_name(struct switch_dev *sdev, char *buf)
+{
+	bool docked = switch_get_state(sdev) != 0;
+	return sprintf(buf, docked ? "DESK\n" : "None\n");
+}
+
+static void a6_dock_update_state(struct a6_device_state *state)
+{
+	unsigned int value, dock;
+
+	if (state->dock_switch == NULL) {
+		return;
+	}
+
+	a6_reg_get (&state->i2c_dev->dev, A6_REG_TS2_I2C_FLAGS_2, &value);
+
+	if (a6_disable_dock_switch) {
+		dock = 0;
+	} else {
+		dock = value & TS2_I2C_FLAGS_2_PUCK ? 1 : 0;
+	}
+	switch_set_state(state->dock_switch, dock);
+}
+
+static int param_set_disable_dock_switch(const char *val,
+		struct kernel_param *kp)
+{
+	struct a6_device_state *state;
+
+	state = batt_state;
+
+	param_set_int(val, kp);
+	a6_dock_update_state(state);
+
+	return 0;
+}
+
+static int a6_dock_probe(struct a6_device_state *state)
+{
+	int ret;
+
+	state->dock_switch = kzalloc(sizeof(struct switch_dev), GFP_KERNEL);
+	if (state->dock_switch == NULL) {
+		return -ENOMEM;
+	}
+
+	state->dock_switch->name = "dock";
+	state->dock_switch->print_name = a6_dock_print_name;
+
+	ret = switch_dev_register(state->dock_switch);
+	if (ret < 0) {
+		kfree(state->dock_switch);
+		state->dock_switch = NULL;
+		return ret;
+	}
+
+	a6_dock_update_state(state);
+
+	return 0;
+}
+
+static void a6_dock_remove(struct a6_device_state *state)
+{
+	switch_dev_unregister(state->dock_switch);
+	kfree(state->dock_switch);
+	state->dock_switch = NULL;
+}
+
 /******************************************************************************
 * a6_i2c_probe()
 ******************************************************************************/
 static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *dev_id)
 {
-	int32_t rc;
+	int rc = 0;
 	struct a6_device_state* state = NULL;
 	struct a6_platform_data* plat_data = client->dev.platform_data;
 	struct a6_wake_ops *wake_ops = (struct a6_wake_ops *) plat_data->wake_ops;
 
 	if (plat_data == NULL) {
-		rc = (-ENODEV);
-		goto err0;
+		/* should this be -ENODEV ? TODO */
+		return ENODEV;
 	}
 
 	state = kzalloc(sizeof(struct a6_device_state), GFP_KERNEL);
 	if(!state) {
-		rc = (-ENOMEM);
-		goto err0;
+		/* should this be -ENOMEM ? TODO */
+		return ENOMEM;
 	}
 
 	state->a2a_rd_buf = kzalloc(A2A_RD_BUFF_SIZE, GFP_KERNEL);
 	if(!state->a2a_rd_buf) {
-		rc = (-ENOMEM);
+		rc = -ENOMEM;
 		goto err0;
 	}
 	state->a2a_wr_buf = kzalloc(A2A_WR_BUFF_SIZE, GFP_KERNEL);
 	if(!state->a2a_wr_buf) {
-		rc = (-ENOMEM);
-		goto err0;
+		rc = -ENOMEM;
+		goto err1;
 	}
 
 	// store i2c client device in state
@@ -4000,14 +4868,14 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	state->ka6d_workqueue = create_workqueue("ka6d");
 	if (!state->ka6d_workqueue) {
 		printk(KERN_ERR "%s: Failed to create ka6d workqueue.\n", A6_DRIVER);
-		goto err0;
+		goto err3;
 	}
 
 	// separate wq for handling force wake timer expiry...
 	state->ka6d_fw_workqueue  = create_workqueue("ka6d_fwd");
 	if (!state->ka6d_fw_workqueue) {
 		printk(KERN_ERR "%s: Failed to create ka6d_fwd workqueue.\n", A6_DRIVER);
-		goto err0;
+		goto err4;
 	}
 
 	init_waitqueue_head(&state->dev_busyq);
@@ -4027,14 +4895,14 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	if (rc != 0) {
 		printk(KERN_ERR "%s: request failed for sbw_tck gpio, val: %d.\n",
 		       A6_DRIVER, plat_data->sbw_tck_gpio);
-		goto err1;
+		goto err5;
 	}
 
 	rc = gpio_direction_output(plat_data->sbw_tck_gpio, 0);
 	if (rc != 0) {
 		printk(KERN_ERR "%s: set direction output failed for sbw_tck gpio, val: %d.\n",
 		       A6_DRIVER, plat_data->sbw_tck_gpio);
-		goto err1;
+		goto err6;
 	}
 
 	// configure sbw_wkup (this is the app -> a6 wakeup used in the JTAG handshaking)
@@ -4042,14 +4910,14 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	if (rc != 0) {
 		printk(KERN_ERR "%s: request failed for sbw_wkup gpio, val: %d.\n",
 		       A6_DRIVER, plat_data->sbw_wkup_gpio);
-		goto err2;
+		goto err6;
 	}
 
 	rc = gpio_direction_output(plat_data->sbw_wkup_gpio, 0);
 	if (rc != 0) {
 		printk(KERN_ERR "%s: set direction output failed for sbw_wkup gpio, val: %d.\n",
 		       A6_DRIVER, plat_data->sbw_wkup_gpio);
-		goto err2;
+		goto err7;
 	}
 
 	// configure sbw_tdio (initially configured as output and the re-configured on use)
@@ -4057,14 +4925,14 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	if (rc != 0) {
 		printk(KERN_ERR "%s: request failed for sbw_tdio gpio, val: %d.\n",
 		       A6_DRIVER, plat_data->sbw_tdio_gpio);
-		goto err3;
+		goto err7;
 	}
 
 	rc = gpio_direction_output(plat_data->sbw_tdio_gpio, 1);
 	if (rc != 0) {
 		printk(KERN_ERR "%s: set direction output failed for sbw_tdio gpio, val: %d.\n",
 		       A6_DRIVER, plat_data->sbw_tdio_gpio);
-		goto err3;
+		goto err8;
 	}
 
 	// configure pwr interrupt (a6 -> app)...
@@ -4072,7 +4940,7 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	if (rc != 0) {
 		printk(KERN_ERR "%s: request failed for pwr gpio, val: %d., err: %d\n",
 		       A6_DRIVER, plat_data->pwr_gpio, rc);
-		goto err4;
+		goto err8;
 	}
 
 	rc = request_irq(gpio_to_irq(plat_data->pwr_gpio), a6_irq,
@@ -4081,9 +4949,10 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	if (rc != 0) {
 		printk(KERN_ERR "%s: request irq failed for pwr_gpio: val: %d, err: %d\n", A6_DRIVER,
 		       plat_data->pwr_gpio, rc);
-		goto err5;
+		goto err9;
 	}
 
+#if 0
 	/* register as misc device */
 	memcpy(&state->fops, &a6_fops, sizeof(struct file_operations));
 	state->mdev.minor = MISC_DYNAMIC_MINOR;
@@ -4092,7 +4961,7 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	rc = misc_register(&state->mdev);
 	if (rc < 0) {
 		printk(KERN_ERR "%s: Failed to register as misc device\n", A6_DRIVER);
-		goto err6;
+		goto err10;
 	}
 
 	memcpy(&state->pmem_fops, &a6_pmem_fops, sizeof(struct file_operations));
@@ -4104,18 +4973,19 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	rc = misc_register(&state->pmem_mdev);
 	if (rc < 0) {
 		printk(KERN_ERR "%s: Failed to register as a6 pmem misc device\n", A6_DRIVER);
-		goto err6;
+		goto err11;
 	}
 
 	rc = a6_create_dev_files(state, &client->dev);
 	if (rc < 0) {
-		goto err6;
+		goto err12;
 	}
+#endif
 
 #ifdef A6_PQ
 	rc = a6_start_ai_dispatch_task(state);
 	if (rc < 0) {
-		goto err7;
+		goto err13;
 	}
 #endif // A6_PQ
 
@@ -4142,32 +5012,56 @@ static int a6_i2c_probe(struct i2c_client *client, const struct i2c_device_id *d
 	}
 #endif
 #endif
-#if defined(CONFIG_A6_BATTERY)
-	if (!strcmp(client->name, A6_DEVICE_0) ) {
 
-		a6_battery_init(client);
+	if (plat_data->power_supply_connected == 1){
+		if ( (rc = a6_fish_battery_probe (state)) < 0) {
+			printk(KERN_ERR "%s: Failed to register power supplies, rc: %d.\n",
+					A6_DRIVER, rc);
+			rc = 0;
+		}
+
+		batt_state = state;
+
+		if ((rc = a6_dock_probe(state)) < 0) {
+			printk(KERN_ERR "%s: Failed to register dock device, rc: %d.\n",
+					A6_DRIVER, rc);
+			rc = 0;
+		}
 	}
-#endif
+
 	printk(KERN_NOTICE "A6 driver initialized successfully!\n");
 	return 0;
 
-err7:
+err13:
+#if 0
 	a6_remove_dev_files(state, &client->dev);
-err6:
+err12:
+	 misc_register(&state->pmem_mdev);
+err11:
+	misc_unregister(&state->mdev);
+err10:
+#endif
 	free_irq(gpio_to_irq(plat_data->pwr_gpio), state);
-err5:
+err9:
 	gpio_free(plat_data->pwr_gpio);
-err4:
+err8:
 	gpio_free(plat_data->sbw_tdio_gpio);
-err3:
+err7:
 	gpio_free(plat_data->sbw_wkup_gpio);
-err2:
+err6:
 	gpio_free(plat_data->sbw_tck_gpio);
+err5:
+	destroy_workqueue(state->ka6d_fw_workqueue);
+err4:
+	destroy_workqueue(state->ka6d_workqueue);
+err3:
+	kfree(state->a2a_wr_buf);
 err1:
-	kfree(state);
+	kfree(state->a2a_rd_buf);
 err0:
 	kfree(state);
-	return -ENODEV;
+
+	return rc;
 }
 
 /******************************************************************************
@@ -4177,7 +5071,16 @@ static int a6_i2c_remove(struct i2c_client *client)
 {
 	struct a6_device_state* state = (struct a6_device_state*)i2c_get_clientdata(client);
 
+	if (state->plat_data->power_supply_connected == 1){
+		a6_fish_battery_remove (state);
+	}
+	if (state->dock_switch) {
+		a6_dock_remove(state);
+	}
+
+#if 0
 	a6_remove_dev_files(state, &client->dev);
+#endif
 
 	if (state->ka6d_workqueue) {
 		destroy_workqueue(state->ka6d_workqueue);
@@ -4185,6 +5088,14 @@ static int a6_i2c_remove(struct i2c_client *client)
 
 	if (state->ka6d_fw_workqueue) {
 		destroy_workqueue(state->ka6d_fw_workqueue);
+	}
+
+	if (state->a2a_rd_buf) {
+		kfree(state->a2a_rd_buf);
+	}
+
+	if (state->a2a_wr_buf) {
+		kfree(state->a2a_wr_buf);
 	}
 
 	return 0;
@@ -4198,10 +5109,15 @@ static int a6_i2c_suspend(struct i2c_client *dev, pm_message_t event)
 {
 	struct a6_device_state* state = (struct a6_device_state*)i2c_get_clientdata(dev);
 
+	set_bit(IS_SUSPENDED, state->flags);
 	// configure a6 irq as wake-source to handle wake on a6 notifications
 	// (charge source detection, various threshold transgressions and emergency
 	// reset detection)...
-	enable_irq_wake(gpio_to_irq(state->plat_data->pwr_gpio));
+	if (state->plat_data->pwr_gpio_wakeup_cap) {
+		enable_irq_wake(gpio_to_irq(state->plat_data->pwr_gpio));
+	}
+	
+	a6_fish_battery_suspend (state);
 
 	return 0;
 }
@@ -4214,7 +5130,16 @@ static int a6_i2c_resume (struct i2c_client *dev)
 	struct a6_device_state* state = (struct a6_device_state*)i2c_get_clientdata(dev);
 
 	// un-configure a6 irq as wake-source...
-	disable_irq_wake(gpio_to_irq(state->plat_data->pwr_gpio));
+	if (state->plat_data->pwr_gpio_wakeup_cap) {
+		disable_irq_wake(gpio_to_irq(state->plat_data->pwr_gpio));
+	}
+	
+	clear_bit(IS_SUSPENDED, state->flags);
+	if (test_and_clear_bit(INT_PENDING, state->flags)) {
+		queue_work(state->ka6d_workqueue, &state->a6_irq_work);
+	}
+
+	a6_fish_battery_resume (state);
 
 	return 0;
 }

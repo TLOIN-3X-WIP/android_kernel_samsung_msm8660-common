@@ -70,7 +70,7 @@ extern struct msm_gpiomux_configs tenderloin_3g_dvt_gpiomux_cfgs[] __initdata;
 #define JACK_DET_GPIO		67
 #endif
 
-#ifdef CONFIG_CHARGER_MAX8903B
+#if defined(CONFIG_CHARGER_MAX8903B) || defined(CONFIG_MAX8903B_CHARGER)
 /* max8903b control GPIOs */
 #define MAX8903B_GPIO_DC_CHG_MODE	42
 #define MAX8903B_GPIO_USB_CHG_MODE	133
