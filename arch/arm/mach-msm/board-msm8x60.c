@@ -3937,7 +3937,7 @@ static void board_cy8ctma395_vdd_enable(int enable)
 
 		rc = regulator_disable(tp_l10);
 		if (rc < 0) {
-			pr_err("failed to enable regulator '8058_l10' with %d\n", rc);
+			pr_err("failed to disable regulator '8058_l10' with %d\n", rc);
 			return;
 		}
 	}
@@ -5927,7 +5927,7 @@ static struct rpm_regulator_init_data rpm_regulator_init_data[] = {
 	RPM_LDO(PM8058_L7,  0, 1, 0, 1800000, 1800000,  LDO50HMIN),
 	RPM_LDO(PM8058_L8,  0, 1, 0, 2900000, 3050000, LDO300HMIN),
 	RPM_LDO(PM8058_L9,  0, 1, 0, 1800000, 1800000, LDO300HMIN),
-	RPM_LDO(PM8058_L10, 1, 1, 0, 3050000, 3050000, LDO300HMIN),
+	RPM_LDO(PM8058_L10, 0, 1, 0, 3050000, 3050000, LDO300HMIN),
 	RPM_LDO(PM8058_L11, 0, 1, 0, 2850000, 2850000, LDO150HMIN),
 	RPM_LDO(PM8058_L12, 0, 1, 0, 2900000, 2900000, LDO150HMIN),
 	RPM_LDO(PM8058_L13, 0, 1, 0, 2050000, 2050000, LDO300HMIN),
@@ -13448,8 +13448,9 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 			machine_is_msm8x60_rumi3() ||
 			machine_is_msm8x60_sim() ||
 			machine_is_msm8x60_fluid() ||
-			machine_is_msm8x60_dragon() ||
-			machine_is_tenderloin())
+			machine_is_msm8x60_dragon()
+			// || machine_is_tenderloin()
+			)
 		msm8x60_init_ebi2();
 	msm8x60_init_tlmm();
 	if (!machine_is_tenderloin()) {

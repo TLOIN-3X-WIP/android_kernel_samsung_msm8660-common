@@ -23,6 +23,7 @@
 */
 
 /* Bluetooth HCI core. */
+#define DEBUG 1
 
 #include <linux/jiffies.h>
 #include <linux/module.h>

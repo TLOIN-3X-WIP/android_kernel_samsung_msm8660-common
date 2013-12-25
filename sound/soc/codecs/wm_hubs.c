@@ -922,8 +922,11 @@ int wm_hubs_handle_analogue_pdata(struct snd_soc_codec *codec,
 	/* If the line outputs are differential then we aren't presenting
 	 * VMID as an output and can disable it.
 	 */
+#if 0
+	// -JCS TODO XXX FIXME
 	if (lineout1_diff && lineout2_diff)
 		codec->dapm.idle_bias_off = 1;
+#endif
 
 	if (lineout1fb)
 		snd_soc_update_bits(codec, WM8993_ADDITIONAL_CONTROL,
