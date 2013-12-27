@@ -40,6 +40,9 @@
 #include <linux/i2c/isa1200.h>
 #include <linux/dma-mapping.h>
 #include <linux/i2c/bq27520.h>
+#ifdef CONFIG_LEDS_LM8502
+#include <linux/i2c_lm8502_led.h>
+#endif
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -5497,6 +5500,95 @@ static struct i2c_board_info cy8ctma340_dragon_board_info[] = {
 };
 #endif
 
+#ifdef CONFIG_LEDS_LM8502
+
+static struct lm8502_memory_config lm8502_memcfg = {
+    .eng1_startpage = 0,
+    .eng1_endpage = 0,
+    .eng2_startpage = 1,
+    .eng2_endpage = 1,
+};
+
+static struct led_cfg lm8502_ledlist_0[] = {
+    [0] = { // LED1
+        .type = LED_WHITE,
+        .current_addr = 0x26,
+        .control_addr = 0x06,
+    },
+};
+
+static struct led_cfg lm8502_ledlist_1[] = {
+    [0] = { // LED2
+        .type = LED_WHITE,
+        .current_addr = 0x27,
+        .control_addr = 0x07,
+    },
+};
+
+static struct lm8502_led_config lm8502_leds[] = {
+    [0] = {
+        //led class dev
+        .cdev.name	= "core_navi_left",
+        .cdev.max_brightness = 100, // 100 percent brightness
+        .cdev.flags = LED_CORE_SUSPENDRESUME,
+        //led list
+        .led_list = lm8502_ledlist_0,
+        .nleds = ARRAY_SIZE(lm8502_ledlist_0),
+        //hw group
+        .hw_group = LED_HW_GRP_NONE,
+        //defualt value
+        .default_max_current = 0x02, // Current full-scale setting, max 3mA
+        .default_state = LED_OFF,
+        .default_brightness = 100, // 100 percent brightness
+    },
+    [1] = {
+        //led class dev
+        .cdev.name	= "core_navi_right",
+        .cdev.max_brightness = 100, // 100 percent brightness
+        .cdev.flags = LED_CORE_SUSPENDRESUME,
+        //led list
+        .led_list = lm8502_ledlist_1,
+        .nleds = ARRAY_SIZE(lm8502_ledlist_1),
+        //hw group
+        .hw_group = LED_HW_GRP_NONE,
+        //defualt value
+        .default_max_current = 0x02, // Current full-scale setting, max 12.5mA
+        .default_state = LED_OFF,
+        .default_brightness = 100, // 100 percent brightness
+	},
+};
+
+static struct lm8502_platform_data lm8502_platform_data = {
+    .enable_gpio = LM8502_LIGHTING_EN_GPIO,
+    .interrupt_gpio = LM8502_LIGHTING_INT_IRQ_GPIO,
+     //vib
+    .vib_default_duty_cycle = 100, //percent
+    .vib_default_direction = 0,
+    .vib_invert_direction = 1,
+    //flash or torch
+    .flash_default_duration = 3,    // 3*32ms
+    .flash_default_current = 500,   // 500mA
+    .torch_default_current = 100,   // 100mA
+    //leds
+    .leds = lm8502_leds,
+    .nleds = ARRAY_SIZE(lm8502_leds),
+    //leds firmware memory configuration
+    .memcfg = &lm8502_memcfg,
+    //power save mode
+    .power_mode = MISC_POWER_SAVE_ON,
+    //others
+    .dev_name = "lm8502",
+};
+
+static struct i2c_board_info lm8502_board_info[] = {
+    {
+        I2C_BOARD_INFO(LM8502_I2C_DEVICE, LM8502_I2C_ADDR),
+        .platform_data = &lm8502_platform_data,
+        .irq = MSM_GPIO_TO_INT(LM8502_LIGHTING_INT_IRQ_GPIO),
+    }
+};
+#endif
+
 #ifdef CONFIG_SERIAL_MSM_HS
 #ifdef CONFIG_MACH_TENDERLOIN
 static int configure_uart_gpios(int on)
@@ -9776,6 +9868,14 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI3_QUP_I2C_BUS_ID,
 		isl29023_i2c_board_info,
 		ARRAY_SIZE(isl29023_i2c_board_info),
+	},
+#endif
+#ifdef CONFIG_LEDS_LM8502
+	{
+		I2C_TENDERLOIN,
+		MSM_GSBI8_QUP_I2C_BUS_ID,   // use GSBI8 as LM8502 i2c
+		lm8502_board_info,
+		ARRAY_SIZE(lm8502_board_info),
 	},
 #endif
 };

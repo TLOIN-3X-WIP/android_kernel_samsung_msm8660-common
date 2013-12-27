@@ -454,6 +454,13 @@ config LEDS_ASIC3
 	  cannot be used. This driver supports hardware blinking with an on+off
 	  period from 62ms to 125s. Say Y to enable LEDs on the HP iPAQ hx4700.
 
+config LEDS_LM8502
+	tristate "LED Support for NS LM8502 controlled LEDs"
+	depends on LEDS_CLASS
+	default n
+	help
+	  This options enables support for NS LM8502 LED controller.
+
 config LEDS_TRIGGERS
 	bool "LED Trigger support"
 	depends on LEDS_CLASS
