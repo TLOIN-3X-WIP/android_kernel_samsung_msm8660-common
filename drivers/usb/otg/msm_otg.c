@@ -102,9 +102,9 @@ static inline bool aca_enabled(void)
 }
 
 #ifdef CONFIG_USB_HOST_NOTIFY
-static void msm_otg_set_id_state_pbatest(int id)
+static void msm_otg_set_id_state_pbatest(int id, struct host_notify_dev *ndev)
 {
-	struct msm_otg *motg = the_msm_otg;
+	struct msm_otg *motg = container_of(ndev, struct msm_otg, ndev);
 	struct otg_transceiver *otg = &motg->otg;
 	pr_info("[OTG] %s %d, !id=%d\n", __func__, __LINE__, !id);
 	motg->pdata->otg_control = OTG_USER_CONTROL;
