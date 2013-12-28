@@ -1274,7 +1274,7 @@ static int lm8502_open(struct inode *ip, struct file *fp)
 
 static const struct file_operations lm8502_fops = {
     .open = lm8502_open,
-    .compat_ioctl = lm8502_ioctl,
+    .unlocked_ioctl = lm8502_ioctl,
 };
 
 int debug_reg_open(struct inode *inode, struct file *file)
