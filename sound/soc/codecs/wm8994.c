@@ -35,6 +35,10 @@
 #include <linux/mfd/wm8994/pdata.h>
 #include <linux/mfd/wm8994/gpio.h>
 
+#include <mach/gpio.h>
+#include <linux/input.h>
+#include <linux/switch.h>
+
 #include "wm8994.h"
 #include "wm_hubs.h"
 
@@ -53,6 +57,8 @@ static int wm8994_retune_mobile_base[] = {
 	WM8994_AIF2_EQ_GAINS_1,
 };
 
+extern int headphone_plugged;
+extern struct switch_dev *headphone_switch;
 
 #if 0
 // TODO -JCS - LATER...
@@ -2867,8 +2873,6 @@ static void wm8958_default_micdet(u16 status, void *data)
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int report = 0;
 
-	// -JCS TODO - ADD HP MIC STUFF
-
 	/* If nothing present then clear our statuses */
 	if (!(status & WM8958_MICD_STS))
 		goto done;
@@ -2883,6 +2887,74 @@ done:
 	snd_soc_jack_report(wm8994->micdet[0].jack, report,
 			    SND_JACK_BTN_0 | SND_JACK_MICROPHONE);
 }
+
+/* HP microphone detection handler for WM8958 - the user can
+ * override this if they wish.
+ * When we get the interrupt, only a few things can happen
+ * 1. A headset with mic is detection reg = 0x203
+ * 2. Button down reg = 0x7;
+ * 3. Button up reg = 0x203;
+ * 4. Nothing is connected reg = 0x402
+ * 5. Headphones reg = 0x7;
+*/
+
+static void wm8958_hp_micdet(u16 status, void *data)
+{
+	struct snd_soc_codec *codec = data;
+	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
+	int oldtype = 0;
+
+	oldtype = wm8994->micdet[0].jack->jack->type;
+	if(0x203 == status && !(wm8994->pdata->jack_is_mic) ){
+		headphone_plugged = 1;
+		dev_err(codec->dev, "  Reporting Headset inserted\n");
+
+		wm8994->pdata->jack_is_mic = true;
+		wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
+		input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
+						    SW_MICROPHONE_INSERT,
+					        1);		
+	}else if(7 == status && wm8994->pdata->jack_is_mic == false) { 
+		headphone_plugged = 1;
+		dev_err(codec->dev, "  Reporting headphones inserted\n");
+		input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
+							    SW_HEADPHONE_INSERT,
+						        1);
+
+		/* Disable detection, headphones can't change state */
+		wm8958_mic_detect(codec, NULL, NULL, NULL);
+		snd_soc_dapm_disable_pin(&(codec->dapm), "MICBIAS2");
+
+	} else {
+
+		if(0x7 == status && wm8994->pdata->jack_is_mic){
+			dev_err(codec->dev, "  Reporting button press down\n");
+			wm8994->micdet[0].jack->jack->type = SND_JACK_BTN_0;
+			input_report_key(wm8994->micdet[0].jack->jack->input_dev, KEY_PLAYPAUSE,
+					 1);
+
+		}else if(0x203 == status && wm8994->pdata->jack_is_mic){
+			dev_err(codec->dev, "  Reporting button press up\n");
+			wm8994->micdet[0].jack->jack->type = SND_JACK_BTN_0;
+			input_report_key(wm8994->micdet[0].jack->jack->input_dev, KEY_PLAYPAUSE,
+					 0);
+		}else if(0x402 == status){
+			headphone_plugged = 0;
+			dev_err(codec->dev, "  Reporting headset removed\n");
+			wm8994->pdata->jack_is_mic = false;
+			wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
+			input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
+							    SW_MICROPHONE_INSERT,
+						        0);
+		}
+	}
+	input_sync(wm8994->micdet[0].jack->jack->input_dev);
+	if (headphone_switch) {
+		switch_set_state(headphone_switch, headphone_plugged);
+	}
+	wm8994->micdet[0].jack->jack->type = oldtype;
+}
+
 
 /**
  * wm8958_mic_detect - Enable microphone detection via the WM8958 IRQ
@@ -2906,13 +2978,18 @@ int wm8958_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack,
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	struct wm8994 *control = codec->control_data;
 
-	if (control->type != WM8958)
+	printk(KERN_DEBUG "%s\n", __func__);
+
+	if (control->type != WM8958) {
+		printk(KERN_DEBUG "%s: invalid type\n", __func__);
 		return -EINVAL;
+	}
 
 	if (jack) {
 		if (!cb) {
-			dev_dbg(codec->dev, "Using default micdet callback\n");
-			cb = wm8958_default_micdet;
+			dev_dbg(codec->dev, "Using hp micdet callback\n");
+			// cb = wm8958_default_micdet;
+			cb = wm8958_hp_micdet;
 			cb_data = codec;
 		}
 
@@ -2921,7 +2998,16 @@ int wm8958_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack,
 		wm8994->jack_cb_data = cb_data;
 
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
-				    WM8958_MICD_ENA, WM8958_MICD_ENA);
+				    2| WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
+
+		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
+				    WM8958_MICD_ENA, 0);
+
+		msleep(100);
+
+		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
+				    2 | WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
+
 	} else {
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 				    WM8958_MICD_ENA, 0);
@@ -2935,30 +3021,45 @@ static irqreturn_t wm8958_mic_irq(int irq, void *data)
 {
 	struct wm8994_priv *wm8994 = data;
 	struct snd_soc_codec *codec = wm8994->codec;
-	int reg;
+	int reg = 0;
+	int i = 0;
+
+	printk(KERN_DEBUG "%s\n", __func__);
 
 	reg = snd_soc_read(codec, WM8958_MIC_DETECT_3);
+
+	// We are doing this because of the i2c driver after a resume.
+    while(reg < 0) {
+		dev_err(codec->dev, "Retry %d\n",i++);
+		msleep(10);
+		reg = snd_soc_read(codec, WM8958_MIC_DETECT_3);
+		
+		if( i == 50 )
+			break;
+	}
+
 	if (reg < 0) {
-		dev_err(codec->dev, "Failed to read mic detect status: %d\n",
-			reg);
+		dev_err(codec->dev, "Failed to read mic detect status: %d\n",reg);
 		return IRQ_NONE;
 	}
 
-	if (!(reg & WM8958_MICD_VALID)) {
-		dev_dbg(codec->dev, "Mic detect data not valid\n");
-		goto out;
-	}
+	dev_info(codec->dev, "MIC DETEC 3 reg = 0x%x\n", reg);
 
 #ifndef CONFIG_SND_SOC_WM8994_MODULE
 	trace_snd_soc_jack_irq(dev_name(codec->dev));
 #endif
 
-	if (wm8994->jack_cb)
-		wm8994->jack_cb(reg, wm8994->jack_cb_data);
-	else
-		dev_warn(codec->dev, "Accessory detection with no callback\n");
+   	if(wm8994->soc_jack->status||(!wm8994->soc_jack->status && wm8994->pdata->jack_is_mic)){
 
-out:
+	// Jack is inserted, we need to find out if we have a mic or button pressed.
+		if (wm8994->jack_cb)
+			wm8994->jack_cb(reg, wm8994->jack_cb_data);
+		else
+			dev_warn(codec->dev, "Accessory detection with no callback\n");
+	} else {
+			dev_info(codec->dev, "soc_jack->status = 0\n");		
+	}
+
 	return IRQ_HANDLED;
 }
 
@@ -3078,16 +3179,19 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 
 	case WM8958:
 		if (wm8994->micdet_irq) {
-			ret = request_threaded_irq(wm8994->micdet_irq, NULL,
+			ret = request_threaded_irq(gpio_to_irq(wm8994->micdet_irq), NULL,
 						   wm8958_mic_irq,
 						   IRQF_TRIGGER_RISING,
-						   "Mic detect",
+ 						   "WM8958 mic detect",
 						   wm8994);
-			// TODO -JCS set_irq_wake?
+
 			if (ret != 0)
 				dev_warn(codec->dev,
 					 "Failed to request Mic detect IRQ: %d\n",
 					 ret);
+
+			// -JCS TODO
+			// set_irq_wake(gpio_to_irq(wm8994->micdet_irq), 1);
 		}
 	}
 

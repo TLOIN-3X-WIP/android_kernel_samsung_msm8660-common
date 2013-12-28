@@ -1650,7 +1650,7 @@ static int msm_soc_dai_init(
 	}
 #endif
 
-#if 0 // TODO -JCS LATER
+#if 1 // TODO -JCS LATER
 	/* Headphone jack detection */
 	// If we have the HeadSet uart (hs_uart) then we DONT want to detect headphones
 	if ( hs_uart == 1 ) {

@@ -313,6 +313,18 @@ static struct gpiomux_setting mi2s_active_cfg = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+static struct gpiomux_setting topaz_mic_det_active_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_UP,
+};
+
+static struct gpiomux_setting topaz_mic_det_susp_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,
+};
+
 static struct gpiomux_setting mi2s_suspend_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
@@ -1159,6 +1171,17 @@ static struct msm_gpiomux_config tenderloin_bt_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &bt_host_wake_active_cfg,
 			[GPIOMUX_SUSPENDED] = &bt_host_wake_suspended_cfg,
+		},
+	},
+};
+
+static struct msm_gpiomux_config tenderloin_snd_configs[] __initdata = {
+	{
+		.gpio      = 67, // JACK_DET_GPIO
+		.settings = {
+
+			[GPIOMUX_ACTIVE]    = &topaz_mic_det_active_cfg,
+			[GPIOMUX_SUSPENDED] = &topaz_mic_det_susp_cfg,
 		},
 	},
 };
@@ -2339,6 +2362,7 @@ tenderloin_gpiomux_cfgs[] __initdata = {
 	{tenderloin_gsbi_configs, ARRAY_SIZE(tenderloin_gsbi_configs)},
 	{tenderloin_uart_configs, ARRAY_SIZE(tenderloin_uart_configs)},
 	{tenderloin_bt_configs, ARRAY_SIZE(tenderloin_bt_configs)},
+	{tenderloin_snd_configs, ARRAY_SIZE(tenderloin_snd_configs)},
 	{msm8x60_pmic_configs, ARRAY_SIZE(msm8x60_pmic_configs)},
 	{tenderloin_lcdc_configs, ARRAY_SIZE(tenderloin_lcdc_configs)},
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},
