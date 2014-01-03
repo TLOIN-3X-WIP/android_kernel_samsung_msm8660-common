@@ -177,6 +177,8 @@ static inline int hci_request(struct hci_dev *hdev, void (*req)(struct hci_dev *
 {
 	int ret;
 
+	printk(KERN_ERR "%s:\n", __func__);
+
 	if (!test_bit(HCI_UP, &hdev->flags))
 		return -ENETDOWN;
 
@@ -565,7 +567,7 @@ int hci_dev_open(__u16 dev)
 		goto done;
 	}
 
-	if (test_bit(HCI_QUIRK_RAW_DEVICE, &hdev->quirks))
+	if (1 || test_bit(HCI_QUIRK_RAW_DEVICE, &hdev->quirks))
 		set_bit(HCI_RAW, &hdev->flags);
 
 	if (hdev->open(hdev)) {
@@ -735,6 +737,8 @@ int hci_dev_reset(__u16 dev)
 {
 	struct hci_dev *hdev;
 	int ret = 0;
+
+	printk(KERN_ERR "%s:\n", __func__);
 
 	hdev = hci_dev_get(dev);
 	if (!hdev)
@@ -1582,6 +1586,11 @@ int hci_unregister_dev(struct hci_dev *hdev)
 	for (i = 0; i < NUM_REASSEMBLY; i++)
 		kfree_skb(hdev->reassembly[i]);
 
+#if 0
+	if (!test_bit(HCI_INIT, &hdev->flags) &&
+				!test_bit(HCI_SETUP, &hdev->flags))
+		mgmt_index_removed(hdev->id);
+#else
 	cancel_work_sync(&hdev->power_on);
 
 	if (!test_bit(HCI_INIT, &hdev->flags) &&
@@ -1591,6 +1600,7 @@ int hci_unregister_dev(struct hci_dev *hdev)
 		mgmt_index_removed(hdev->id);
 		hci_dev_unlock_bh(hdev);
 	}
+#endif
 
 	if (!IS_ERR(hdev->tfm))
 		crypto_free_blkcipher(hdev->tfm);
