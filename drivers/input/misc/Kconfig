@@ -576,4 +576,6 @@ config INPUT_ISL29023
 	  This driver can also be built as a module.  If so, the module
 	  will be called isl29023.
 
+source "drivers/input/misc/mpu3050/Kconfig"
+
 endif
