@@ -656,6 +656,12 @@ config USB_GADGET_DUALSPEED
 	bool
 	depends on USB_GADGET
 
+config USB_MULTIPLE_CHARGER_DETECT
+	boolean "Multiple USB Wall charger support"
+	depends on USB_GADGET && USB_MSM_72K
+	help
+	  Detect multiple types of USB wall charger
+
 #
 # USB Gadget Drivers
 #
