@@ -2199,7 +2199,7 @@ static int msm_hsusb_pmic_id_notif_init(void (*callback)(int online), int init)
 	if (!callback)
 		return -EINVAL;
 
-	if (machine_is_msm8x60_fluid())
+	if (machine_is_msm8x60_fluid() || machine_is_tenderloin())
 		return -ENOTSUPP;
 
 	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 2) {
@@ -2549,7 +2549,8 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.se1_gating		 = SE1_GATING_DISABLE,
-	.bam_disable		 = 1,
+	.bam_disable		 = 1, // -JCS TODO
+	.hsdrvslope			= 0x05, // -JCS TODO
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	.pmic_id_notif_init = msm_hsusb_pmic_id_notif_init,
 	.phy_id_setup_init = msm_hsusb_phy_id_setup_init,

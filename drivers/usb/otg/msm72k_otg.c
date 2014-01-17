@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
@@ -569,6 +569,7 @@ static int msm_otg_set_power(struct otg_transceiver *xceiv, unsigned mA)
 	 * when wall-charger is used.
 	 */
 	if (pdata->chg_vbus_draw && new_chg != USB_CHG_TYPE__INVALID &&
+			new_chg != USB_CHG_TYPE__UNKNOWN &&
 		(charge || new_chg != USB_CHG_TYPE__WALLCHARGER))
 			pdata->chg_vbus_draw(charge);
 
@@ -863,8 +864,10 @@ static int msm_otg_resume(struct msm_otg *dev)
 	unsigned temp;
 	unsigned ret;
 
-	if (!atomic_read(&dev->in_lpm))
+	if (!atomic_read(&dev->in_lpm)) {
+		printk(KERN_DEBUG "%s: !in_lpm abort\n", __func__);
 		return 0;
+	}
 	/* vote for vddcx, as PHY cannot tolerate vddcx below 1.0V */
 	if (dev->pdata->config_vddcx) {
 		ret = dev->pdata->config_vddcx(1);
@@ -932,6 +935,8 @@ static void msm_otg_resume_w(struct work_struct *w)
 {
 	struct msm_otg	*dev = container_of(w, struct msm_otg, otg_resume_work);
 	unsigned long timeout;
+
+	printk(KERN_DEBUG "%s:\n", __func__);
 
 	if (can_phy_power_collapse(dev) && dev->pdata->ldo_enable)
 		dev->pdata->ldo_enable(1);
@@ -1312,6 +1317,8 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	enum usb_otg_state state;
 	unsigned long flags;
 
+	printk(KERN_DEBUG "%s:\n", __func__);
+
 	if (atomic_read(&dev->in_lpm)) {
 		disable_irq_nosync(dev->irq);
 		wake_lock(&dev->wlock);
@@ -1332,8 +1339,13 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	sts_mask = (otgsc & OTGSC_INTR_MASK) >> 8;
 
 	if (!((otgsc & sts_mask) || (sts & STS_PCI))) {
-		ret = IRQ_NONE;
-		goto out;
+		if (otgsc == 0x9002d20 && sts == 0xe0000480) {
+			pr_debug("STS-skip skip-it\n");
+		} else {
+			pr_debug("STS-skip otgsc=0x%x sts=0x%x\n", otgsc, sts);
+			ret = IRQ_NONE;
+			goto out;
+		}
 	}
 
 	spin_lock_irqsave(&dev->lock, flags);
@@ -1341,8 +1353,8 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	spin_unlock_irqrestore(&dev->lock, flags);
 
 	if(printk_ratelimit()){
-		pr_debug("IRQ state: %s\n", state_string(state));
-		pr_debug("otgsc = %x\n", otgsc);
+		// pr_debug("IRQ state: %s\n", state_string(state));
+		// pr_debug("otgsc = %x\n", otgsc);
 		printk("%s: IRQ state: %s\t otgsc = %x\n", __func__, state_string(state), otgsc);
 	}
 
@@ -1709,7 +1721,7 @@ reset_link:
 	set_cdr_auto_reset(dev);
 	set_driver_amplitude(dev);
 	set_se1_gating(dev);
-	set_squelch_level(dev);
+	// set_squelch_level(dev); // -JCS TODO
 
 	writel(0x0, USB_AHB_BURST);
 	writel(0x00, USB_AHB_MODE);
@@ -2427,6 +2439,8 @@ static void msm_otg_id_func(unsigned long _dev)
 {
 	struct msm_otg	*dev = (struct msm_otg *) _dev;
 	u8		phy_ints;
+
+	// printk(KERN_DEBUG "%s:\n", __func__);
 
 #ifdef CONFIG_USB_MSM_STANDARD_ACA
 	/*
