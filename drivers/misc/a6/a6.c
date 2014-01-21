@@ -114,7 +114,7 @@ int32_t diff_time;
 uint32_t start_last_a6_activity = 0;
 #endif
 
-long a6_last_ps_connect = 0;
+unsigned long a6_last_ps_connect = 0;
 
 /* page 0x00 */
 /* host interrupts */
@@ -4512,7 +4512,7 @@ static void a6_update_connected_ps()
 			(connected & MAX8903B_CONNECTED_PS_DOCK) ? 1 : 0);
 
 	max8903b_set_connected_ps(connected);
-	a6_last_ps_connect = (long)jiffies;
+	a6_last_ps_connect = jiffies;
 }
 
 static int a6_fish_power_get_property(struct power_supply *psy,
