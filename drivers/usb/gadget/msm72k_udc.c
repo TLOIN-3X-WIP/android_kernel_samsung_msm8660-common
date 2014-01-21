@@ -524,16 +524,8 @@ static void usb_chg_detect(struct work_struct *w)
 		pm_runtime_put_sync(&ui->pdev->dev);
 		wake_unlock(&ui->wlock);
 	}
-	printk(KERN_DEBUG "%s: END\n", __func__);
+	printk("%s: END\n", __func__);
 }
-
-#if 0
-#define chg_det_write(ui, val, reg) \
-	ulpi_write_with_reset(ui, val, reg)
-#else
-#define chg_det_write(ui, val, reg) \
-	otg_io_write(ui->xceiv, val, reg)
-#endif
 
 static int usb_multi_chg_detect(struct usb_info *ui)
 {
@@ -541,111 +533,90 @@ static int usb_multi_chg_detect(struct usb_info *ui)
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
 	enum chg_type temp = USB_CHG_TYPE__INVALID;
 	int maxpower = -EINVAL;
-	unsigned lsval;
-	int need_retry = 1;
-	int retries = 0;
 
 	ui->is_cdp = 0; // not CDP
 
-	lsval = readl(USB_PORTSC) & PORTSC_LS;
-	printk("UDC-CHG: %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, lsval);
-
-	do {
-	need_retry = !need_retry;
-	retries++;
-
-	if (retries > 1) {
-		msm72k_pullup_internal(&ui->gadget, 1);
-		msleep(30);
-	}
 	//disconnect all pull-up and pull-down resistors on D+ and D-
 	writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
 	/* S/W workaround, Issue#1 */
-	chg_det_write(ui, 0x0f, 0x34);
-	//chg_det_write(ui, 0x48, 0x04);
+	ulpi_write_with_reset(ui, 0x0f, 0x34);
+	//ulpi_write_with_reset(ui, 0x48, 0x04);
 
 	msleep(10);
 
-	lsval = readl(USB_PORTSC) & PORTSC_LS;
-	printk("UDC-CHG: %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, lsval);
-
-	chg_det_write(ui,0x4d, 0x04);
-	chg_det_write(ui,0x06, 0x0c);
+	ulpi_write_with_reset(ui,0x4d, 0x04);
+	ulpi_write_with_reset(ui,0x06, 0x0c);
 	msleep(20/*10*/);  // this delay must be here !!
 
-	lsval = readl(USB_PORTSC) & PORTSC_LS;
-	printk("UDC-CHG: %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, lsval);
-	if (lsval & (1 << 11)) { //D+ : high
-		if (lsval & (1 << 10)) { //D+ : high, D- : high
-			chg_det_write(ui, 0x45, 0x04);
-			chg_det_write(ui, 0x2, 0x0b); //pull-down D+
+	if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 11)) { //D+ : high
+		if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : high, D- : high
+			ulpi_write_with_reset(ui, 0x45, 0x04);
+			ulpi_write_with_reset(ui, 0x2, 0x0b); //pull-down D+
 			msleep(10/*100*/);
-			lsval = readl(USB_PORTSC) & PORTSC_LS;
-			printk("UDC-CHG: %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, lsval);
-			if (lsval & (1 << 10)) { //D+ : high, D- : high
-				if (lsval & (1 << 11)) {
-					printk("UDC-CHG: %s (%d) : iPad Charger(2000mA)!\n", __func__, __LINE__);
+			printk("UDC-CHG (2-1): %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, (readl(USB_PORTSC) & PORTSC_LS));
+			if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : high, D- : high
+				if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 11)) {
+					printk("UDC-CHG (2-1-1-1-1): %s (%d) : iPad Charger(2000mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__WALLCHARGER;
 					maxpower = 2000;
 				} else {
-					printk("UDC-CHG: %s (%d) : HP/iPhone Adaptor(900mA)!\n", __func__, __LINE__);
+					printk("UDC-CHG (2-1-1-1-2): %s (%d) : HP/iPhone Adaptor(900mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__WALLCHARGER;
 					maxpower = 900;//500;
-					need_retry = !need_retry;
 				}
 			} else { //D+ : high, D- : low
-				printk("UDC-CHG: %s (%d) : 10W Adaptor(2000mA)!\n", __func__, __LINE__);
+				printk("UDC-CHG (2-1-1-2): %s (%d) : 10W Adaptor(2000mA)!\n", __func__, __LINE__);
 				temp = USB_CHG_TYPE__WALLCHARGER;
 				maxpower = 2000; //usb_get_max_power(ui);
+
 			}
 		} else { //D+ : high, D- : low
-			printk("UDC-CHG: %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
+			printk("UDC-CHG (2-1-2): %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
 			temp = USB_CHG_TYPE__WALLCHARGER;
 			maxpower = 100;
+
 		}
 	} else { //D+ : low,
-		lsval = readl(USB_PORTSC) & PORTSC_LS;
-		printk("UDC-CHG: %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, lsval);
-		if (lsval & (1 << 10)) { //D+ : low, D- : high
-			printk("UDC-CHG: %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
+		if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : low, D- : high
+			printk("UDC-CHG (2-2): %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
 			temp = USB_CHG_TYPE__WALLCHARGER;
 			maxpower = 100;
-		} else { //D+ : low, D- : low
-			chg_det_write(ui, 0x25, 0x34); //Aplly current source on D+
-			msleep(10/*100*/);
-			lsval = readl(USB_PORTSC) & PORTSC_LS;
-			printk("UDC-CHG: %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, lsval);
 
-			if (lsval & (1 << 11)) { //D+ : high
-				if (lsval & (1 << 10)) { //D+ : high, D- : high
-					printk("UDC-CHG: %s (%d) : OMTP/Android Phone Adaptor(900mA)!\n", __func__, __LINE__);
+		} else { //D+ : low, D- : low
+			ulpi_write_with_reset(ui, 0x25, 0x34); //Aplly current source on D+
+			msleep(10/*100*/);
+			printk("UDC-CHG (2-2): %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, (readl(USB_PORTSC) & PORTSC_LS));
+
+			if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 11)) { //D+ : high
+				if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : high, D- : high
+					printk("UDC-CHG (2-2-1-1): %s (%d) : OMTP/Android Phone Adaptor(900mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__WALLCHARGER;
 					maxpower = 900;
 				} else { //D+ : high, D- : low
-					printk("UDC-CHG: %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
+					printk("UDC-CHG (2-2-1-2): %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__WALLCHARGER;
 					maxpower = 100;
 				}
 			} else { //D+ : low
-				chg_det_write(ui, 0x24, 0x34);
+				ulpi_write_with_reset(ui, 0x24, 0x34);
 				msleep(10);
 				if (ulpi_read_with_reset(ui, 0x34) & (1 << 4)) {
-					chg_det_write(ui, 0x0f, 0x34);
+					ulpi_write_with_reset(ui, 0x0f, 0x34);
 					writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
 					msleep(10);
 					writel(readl(USB_USBCMD) | USBCMD_RS, USB_USBCMD);
-					printk("UDC-CHG: %s (%d) : USB host Charging Downstream Port(1400mA)!\n", __func__, __LINE__);
+					printk("UDC-CHG (2-2-2-1): %s (%d) : USB host Charging Downstream Port(1400mA)!\n", __func__, __LINE__);
 					//temp = USB_CHG_TYPE__WALLCHARGER;
 					temp = USB_CHG_TYPE__SDP;
 					ui->is_cdp = 1;
 					maxpower = 1400;
 
 				} else {
-					chg_det_write(ui, 0x0f, 0x34);
+					ulpi_write_with_reset(ui, 0x0f, 0x34);
 					writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
 					msleep(10);
 					writel(readl(USB_USBCMD) | USBCMD_RS, USB_USBCMD);
-					printk("UDC-CHG: %s (%d) : USB host Adaptor(500mA)!\n", __func__, __LINE__);
+					printk("UDC-CHG (2-2-2): %s (%d) : USB host Adaptor(500mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__SDP;
 					maxpower = 500;//usb_get_max_power(ui);
 					// avoid the current cleanup below
@@ -654,10 +625,9 @@ static int usb_multi_chg_detect(struct usb_info *ui)
 					return maxpower;
 				}
 			}
-			chg_det_write(ui,0x0F, 0x34); // clean up current source on D+
+			ulpi_write_with_reset(ui,0x0F, 0x34); // clean up current source on D+
 		}
 	}
-	} while (need_retry && retries < 3);
 
 	atomic_set(&otg->chg_type, temp);
 
