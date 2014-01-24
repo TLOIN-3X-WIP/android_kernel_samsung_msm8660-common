@@ -2064,12 +2064,8 @@ static inline void hci_cmd_complete_evt(struct hci_dev *hdev, struct sk_buff *sk
 
 	opcode = __le16_to_cpu(ev->opcode);
 
-	printk(KERN_ERR "%s: opcode=0x%x\n", __func__, opcode);
-
-	if (test_bit(HCI_RESET, &hdev->flags) && (opcode != HCI_OP_RESET)) {
-		printk(KERN_ERR "%s: ignoring under reset\n", __func__);
+	if (test_bit(HCI_RESET, &hdev->flags) && (opcode != HCI_OP_RESET))
 		return;
-	}
 
 	switch (opcode) {
 	case HCI_OP_INQUIRY_CANCEL:
@@ -2293,8 +2289,6 @@ static inline void hci_cmd_status_evt(struct hci_dev *hdev, struct sk_buff *skb)
 
 	opcode = __le16_to_cpu(ev->opcode);
 
-	printk(KERN_ERR "%s: opcode=0x%x\n", __func__, opcode);
-
 	switch (opcode) {
 	case HCI_OP_INQUIRY:
 		hci_cs_inquiry(hdev, ev->status);
@@ -2389,8 +2383,6 @@ static inline void hci_cmd_status_evt(struct hci_dev *hdev, struct sk_buff *skb)
 		atomic_set(&hdev->cmd_cnt, 1);
 		if (!skb_queue_empty(&hdev->cmd_q))
 			tasklet_schedule(&hdev->cmd_task);
-	} else if (ev->ncmd) {
-		printk(KERN_ERR "%s: skipping cmd_task - under reset\n", __func__);
 	}
 }
 
@@ -3461,7 +3453,7 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	struct hci_event_hdr *hdr = (void *) skb->data;
 	__u8 event = hdr->evt;
 
-	BT_DBG("event=0x%x", event);
+	BT_DBG("");
 
 	skb_pull(skb, HCI_EVENT_HDR_SIZE);
 
