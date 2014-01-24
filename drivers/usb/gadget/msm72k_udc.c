@@ -16,7 +16,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -458,7 +457,6 @@ static void usb_chg_stop(struct work_struct *w)
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
 	enum chg_type temp;
 
-	printk(KERN_DEBUG "%s:\n", __func__);
 	temp = atomic_read(&otg->chg_type);
 
 	if (temp == USB_CHG_TYPE__SDP)
@@ -472,8 +470,6 @@ static void usb_chg_detect(struct work_struct *w)
 	enum chg_type temp = USB_CHG_TYPE__INVALID;
 	unsigned long flags;
 	int maxpower;
-
-	printk("%s: START\n", __func__);
 
 	spin_lock_irqsave(&ui->lock, flags);
 	if (ui->usb_state == USB_STATE_NOTATTACHED) {
@@ -524,7 +520,6 @@ static void usb_chg_detect(struct work_struct *w)
 		pm_runtime_put_sync(&ui->pdev->dev);
 		wake_unlock(&ui->wlock);
 	}
-	printk("%s: END\n", __func__);
 }
 
 static int usb_multi_chg_detect(struct usb_info *ui)
@@ -1518,7 +1513,7 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			/* XXX: we can't seem to detect going offline,
 			 * XXX:  so deconfigure on reset for the time being
 			 */
-			printk(KERN_INFO "%s: usb: notify offline X3\n", __func__);
+			printk(KERN_INFO "%s: usb: notify offline\n", __func__);
 			ui->driver->disconnect(&ui->gadget);
 			/* cancel pending ep0 transactions */
 			flush_endpoint(&ui->ep0out);
@@ -1625,7 +1620,7 @@ static void usb_reset(struct usb_info *ui)
 	atomic_set(&ui->configured, 0);
 
 	if (ui->driver) {
-		printk(KERN_INFO "%s: usb: notify offline X1\n", __func__);
+		printk(KERN_INFO "%s: usb: notify offline\n", __func__);
 		ui->driver->disconnect(&ui->gadget);
 	}
 
@@ -1758,7 +1753,6 @@ static void usb_do_work(struct work_struct *w)
 			 */
 			if (flags & USB_FLAG_VBUS_OFFLINE) {
 
-				printk(KERN_DEBUG "%s: VBUS_OFFLINE chg_current=0\n", __func__);
 				ui->chg_current = 0;
 				/* wait incase chg_detect is running */
 				if (!ui->gadget.is_a_peripheral)
@@ -1781,7 +1775,7 @@ static void usb_do_work(struct work_struct *w)
 				atomic_set(&ui->configured, 0);
 
 				if (ui->driver) {
-					printk(KERN_INFO "%s: usb: notify offline X2\n", __func__);
+					printk(KERN_INFO "%s: usb: notify offline\n", __func__);
 					ui->driver->disconnect(&ui->gadget);
 				}
 				/* cancel pending ep0 transactions */
@@ -1851,12 +1845,12 @@ static void usb_do_work(struct work_struct *w)
 						atomic_read(&ui->configured));
 
 				if (maxpower < 0) {
-					printk(KERN_DEBUG "%s: skip otg_set_power\n", __func__);
+					// printk(KERN_DEBUG "%s: skip otg_set_power\n", __func__);
 					break;
 				}
 
 				ui->chg_current = maxpower;
-				printk(KERN_DEBUG "%s: otg_set_power(usb_get_max_power)\n", __func__);
+				// printk(KERN_DEBUG "%s: otg_set_power(usb_get_max_power)\n", __func__);
 				otg_set_power(ui->xceiv, maxpower);
 				break;
 			}
@@ -1909,10 +1903,10 @@ static void usb_do_work(struct work_struct *w)
 
 				if (!atomic_read(&ui->softconnect)) {
 					if (atomic_read(&otg->chg_type) !=  USB_CHG_TYPE__UNKNOWN) {
-						printk("!SOFTCONNECT\n");
+						// printk("!SOFTCONNECT\n");
 						break;
 					} else {
-						printk("!SOFTCONNECT ignored for chg_det\n");
+						// printk("!SOFTCONNECT ignored for chg_det\n");
 					}
 				}
 
@@ -2536,8 +2530,6 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 	unsigned long flags;
 	int suspended;
 
-	printk(KERN_DEBUG "%s: CALLED is_active=%d\n", __func__, is_active);
-
 	atomic_set(&ui->softconnect, is_active);
 
 	spin_lock_irqsave(&ui->lock, flags);
@@ -2556,7 +2548,6 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 	msm72k_pullup_internal(_gadget, is_active);
 
 	if (is_active && !ui->gadget.is_a_peripheral) {
-		printk(KERN_DEBUG "%s: calling chg_det\n", __func__);
 		schedule_delayed_work(&ui->chg_det, USB_CHG_DET_DELAY);
 	}
 
@@ -2601,8 +2592,6 @@ static int msm72k_udc_vbus_draw(struct usb_gadget *_gadget, unsigned mA)
 {
 	struct usb_info *ui = container_of(_gadget, struct usb_info, gadget);
 	unsigned long flags;
-
-	printk(KERN_DEBUG "%s: mA=%u\n", __func__, mA);
 
 	spin_lock_irqsave(&ui->lock, flags);
 	ui->b_max_pow = mA;
