@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
@@ -865,7 +864,7 @@ static int msm_otg_resume(struct msm_otg *dev)
 	unsigned ret;
 
 	if (!atomic_read(&dev->in_lpm)) {
-		printk(KERN_DEBUG "%s: !in_lpm abort\n", __func__);
+		// printk(KERN_DEBUG "%s: !in_lpm abort\n", __func__);
 		return 0;
 	}
 	/* vote for vddcx, as PHY cannot tolerate vddcx below 1.0V */
@@ -935,8 +934,6 @@ static void msm_otg_resume_w(struct work_struct *w)
 {
 	struct msm_otg	*dev = container_of(w, struct msm_otg, otg_resume_work);
 	unsigned long timeout;
-
-	printk(KERN_DEBUG "%s:\n", __func__);
 
 	if (can_phy_power_collapse(dev) && dev->pdata->ldo_enable)
 		dev->pdata->ldo_enable(1);
@@ -1317,8 +1314,6 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	enum usb_otg_state state;
 	unsigned long flags;
 
-	printk(KERN_DEBUG "%s:\n", __func__);
-
 	if (atomic_read(&dev->in_lpm)) {
 		disable_irq_nosync(dev->irq);
 		wake_lock(&dev->wlock);
@@ -1339,13 +1334,8 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	sts_mask = (otgsc & OTGSC_INTR_MASK) >> 8;
 
 	if (!((otgsc & sts_mask) || (sts & STS_PCI))) {
-		if (otgsc == 0x9002d20 && sts == 0xe0000480) {
-			pr_debug("STS-skip skip-it\n");
-		} else {
-			pr_debug("STS-skip otgsc=0x%x sts=0x%x\n", otgsc, sts);
-			ret = IRQ_NONE;
-			goto out;
-		}
+		ret = IRQ_NONE;
+		goto out;
 	}
 
 	spin_lock_irqsave(&dev->lock, flags);
@@ -1355,7 +1345,7 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	if(printk_ratelimit()){
 		// pr_debug("IRQ state: %s\n", state_string(state));
 		// pr_debug("otgsc = %x\n", otgsc);
-		printk("%s: IRQ state: %s\t otgsc = %x\n", __func__, state_string(state), otgsc);
+		// printk("%s: IRQ state: %s\t otgsc = %x\n", __func__, state_string(state), otgsc);
 	}
 
 	if ((otgsc & OTGSC_IDIE) && (otgsc & OTGSC_IDIS)) {
