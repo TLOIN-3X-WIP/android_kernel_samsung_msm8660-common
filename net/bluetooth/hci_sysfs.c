@@ -1,6 +1,5 @@
 /* Bluetooth HCI driver model support. */
 
-#define DEBUG 1
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/init.h>

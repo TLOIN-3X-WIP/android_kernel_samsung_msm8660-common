@@ -23,7 +23,7 @@
 */
 
 /* Bluetooth HCI sockets. */
-#define DEBUG 1
+
 #include <linux/module.h>
 
 #include <linux/types.h>
@@ -272,8 +272,7 @@ static inline int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd, unsign
 			return -EACCES;
 
 		if (test_bit(HCI_QUIRK_RAW_DEVICE, &hdev->quirks))
-			return 0; // -JCS TODO
-			// return -EPERM;
+			return -EPERM;
 
 		if (arg)
 			set_bit(HCI_RAW, &hdev->flags);
@@ -528,7 +527,7 @@ static int hci_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 	int reserve = 0;
 	int err;
 
-	// BT_DBG("sock %p sk %p", sock, sk);
+	BT_DBG("sock %p sk %p", sock, sk);
 
 	if (msg->msg_flags & MSG_OOB)
 		return -EOPNOTSUPP;

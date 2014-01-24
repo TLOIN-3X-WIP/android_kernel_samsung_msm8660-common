@@ -24,8 +24,6 @@
 
 /* Bluetooth HCI connection handling. */
 
-#define DEBUG 1
-
 #include <linux/module.h>
 
 #include <linux/types.h>

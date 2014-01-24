@@ -23,7 +23,7 @@
 */
 
 /* Bluetooth HCI event handling. */
-#define DEBUG 1
+
 #include <linux/module.h>
 
 #include <linux/types.h>
