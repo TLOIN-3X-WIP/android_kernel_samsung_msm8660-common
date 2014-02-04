@@ -306,6 +306,7 @@ static int gport_connect(struct f_gser *gser)
 	case USB_GADGET_XPORT_TTY:
 		gserial_connect(&gser->port, port_num);
 		break;
+#if 0
 	case USB_GADGET_XPORT_SDIO:
 		gsdio_connect(&gser->port, port_num);
 		break;
@@ -327,6 +328,7 @@ static int gport_connect(struct f_gser *gser)
 			return ret;
 		}
 		break;
+#endif
 	default:
 		pr_err("%s: Un-supported transport: %s\n", __func__,
 				xport_to_str(gser->transport));
@@ -350,6 +352,7 @@ static int gport_disconnect(struct f_gser *gser)
 	case USB_GADGET_XPORT_TTY:
 		gserial_disconnect(&gser->port);
 		break;
+#if 0
 	case USB_GADGET_XPORT_SDIO:
 		gsdio_disconnect(&gser->port, port_num);
 		break;
@@ -360,6 +363,7 @@ static int gport_disconnect(struct f_gser *gser)
 		ghsic_ctrl_disconnect(&gser->port, port_num);
 		ghsic_data_disconnect(&gser->port, port_num);
 		break;
+#endif
 	default:
 		pr_err("%s: Un-supported transport:%s\n", __func__,
 				xport_to_str(gser->transport));
@@ -918,6 +922,7 @@ static int gserial_init_port(int port_num, const char *name)
 		gserial_ports[port_num].client_port_num = no_tty_ports;
 		no_tty_ports++;
 		break;
+#if 0
 	case USB_GADGET_XPORT_SDIO:
 		gserial_ports[port_num].client_port_num = no_sdio_ports;
 		no_sdio_ports++;
@@ -930,6 +935,7 @@ static int gserial_init_port(int port_num, const char *name)
 		/*client port number will be updated in gport_setup*/
 		no_hsic_sports++;
 		break;
+#endif
 	default:
 		pr_err("%s: Un-supported transport transport: %u\n",
 				__func__, gserial_ports[port_num].transport);

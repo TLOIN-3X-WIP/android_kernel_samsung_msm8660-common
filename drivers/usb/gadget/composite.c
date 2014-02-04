@@ -630,11 +630,15 @@ int usb_remove_config(struct usb_composite_dev *cdev,
 
 	spin_lock_irqsave(&cdev->lock, flags);
 
+	printk(KERN_DEBUG "%s: MARK1\n", __func__);
+
 	if (cdev->config == config)
 		reset_config(cdev);
 
+	printk(KERN_DEBUG "%s: MARK2\n", __func__);
 	list_del(&config->list);
 
+	printk(KERN_DEBUG "%s: MARK3\n", __func__);
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
 	return unbind_config(cdev, config);
