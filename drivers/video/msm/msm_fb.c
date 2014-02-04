@@ -1478,7 +1478,8 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	mfd->ref_cnt = 0;
 	mfd->sw_currently_refreshing = FALSE;
 	mfd->sw_refreshing_enable = TRUE;
-	mfd->panel_power_on = FALSE;
+	mfd->panel_power_on = TRUE;
+	bl_updated = 1;
 
 	mfd->pan_waiting = FALSE;
 	init_completion(&mfd->pan_comp);
