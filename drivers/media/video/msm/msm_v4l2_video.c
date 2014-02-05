@@ -1,13 +1,19 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/*
+ *  linux/drivers/media/video/msm/msm_v4l2_video.c - MSM V4L2 Video Out
+ *
+ *  Copyright (C) 2008 Palm Inc,
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * THIS PACKAGE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+ * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * Author: Kevin McCray (kevin.mccray@palm.com)
+ * Author: Jacky Cheung (jacky.cheung@palm.com)
+ *
  */
 
 #include <linux/init.h>
@@ -19,42 +25,185 @@
 #include <linux/platform_device.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
 #include <linux/msm_mdp.h>
-#include <linux/sched.h>
-#include <linux/capability.h>
+#include <linux/android_pmem.h>
 
 #include <media/v4l2-ioctl.h>
-#include <media/videobuf-dma-sg.h>
 #include <media/v4l2-dev.h>
-#include <media/msm_v4l2_overlay.h>
+#include <media/videobuf-dma-sg.h>
 
 #include <mach/board.h>
 #include <mach/msm_fb.h>
 
-#include "msm_v4l2_video.h"
+#include <linux/msm_v4l2_video.h>
 
 #define MSM_VIDEO -1
 
-static struct msm_v4l2_overlay_device	*saved_vout0;
+#define MSMV4L2_DEBUG_MSGS 0
+#if MSMV4L2_DEBUG_MSGS
+#define DLOG(fmt,args...) \
+	do { printk(KERN_INFO "[%s:%s:%d] "fmt, __FILE__, __func__, __LINE__, \
+		    ##args); } \
+	while (0)
+#else
+#define DLOG(x...) do {} while (0)
+#endif
 
-static struct mutex msmfb_lock;
-static char *v4l2_ram_phys;
-static unsigned int v4l2_ram_size;
+#define  MSMV4L2_DEBUG_PROFILING   0
+#if MSMV4L2_DEBUG_PROFILING
+static suseconds_t msmv4l2_stTime, msmv4l2_cbst;
+#define MSMV4L2_PROFILE_START \
+	{ \
+		struct timeval msmv4l2_time; \
+		do_gettimeofday(&msmv4l2_time);\
+		msmv4l2_stTime = msmv4l2_time.tv_usec; \
+	}
 
-static int msm_v4l2_overlay_mapformat(uint32_t pixelformat);
+#define MSMV4L2_PROFILE_END(TEXT) \
+	{ \
+		unsigned long x; \
+		struct timeval msmv4l2_time; \
+		do_gettimeofday(&msmv4l2_time);\
+		x = msmv4l2_time.tv_usec - msmv4l2_stTime; \
+		printk(KERN_INFO "%s  %lu ms\n", TEXT, x/1000);\
+		msmv4l2_stTime = msmv4l2_time.tv_usec; \
+	}
+#else
+#define MSMV4L2_PROFILE_START
+#define MSMV4L2_PROFILE_END(TEXT)
+#endif
 
-static int msm_v4l2_overlay_startstreaming(struct msm_v4l2_overlay_device *vout)
+static struct msmv4l2_device 	*saved_vout0;
+static struct msmv4l2_device 	*saved_vout1;
+
+struct mutex msmfb_lock;
+
+static int msmv4l2_startstreaming(struct msmv4l2_device *vout)
 {
+	mutex_lock(&msmfb_lock);
+	msm_fb_v4l2_enable(true, 
+		(vout->id == 0)? MSMV4L2_LAYER0 : MSMV4L2_LAYER1);
+	mutex_unlock(&msmfb_lock);
+
+	vout->streaming = 1;
+
+	return 0;
+}
+
+static int msmv4l2_stopstreaming(struct msmv4l2_device *vout)
+{
+	if (!vout->streaming)
+		return 0;
+
+	mutex_lock(&msmfb_lock);
+	//Enable msm_fb to switch the video layer off
+	msm_fb_v4l2_enable(false, 
+		(vout->id == 0)? MSMV4L2_LAYER0 : MSMV4L2_LAYER1);
+	mutex_unlock(&msmfb_lock);
+
+	vout->streaming = 0;
+
+	return 0;
+}
+
+static int msmv4l2_mapformat(uint32_t pixelformat)
+{
+	int mdp_format;
+
+	switch(pixelformat) {
+		case V4L2_PIX_FMT_RGB565:
+			mdp_format = MDP_RGB_565;
+			break;
+		case V4L2_PIX_FMT_RGB32:
+			mdp_format = MDP_ARGB_8888;
+			break;
+		case V4L2_PIX_FMT_RGB24:
+			mdp_format = MDP_RGB_888;
+			break;
+		case V4L2_PIX_FMT_NV12:
+			mdp_format = MDP_Y_CRCB_H2V2;
+			break;
+		case V4L2_PIX_FMT_NV21:
+			mdp_format = MDP_Y_CBCR_H2V2;
+			break;
+		case V4L2_PIX_FMT_NV12_TILE:
+			mdp_format = MDP_Y_CRCB_H2V2_TILE;
+			break;
+		case V4L2_PIX_FMT_NV21_TILE:
+			mdp_format = MDP_Y_CBCR_H2V2_TILE;
+			break;
+		default:	
+			mdp_format = MDP_Y_CBCR_H2V2;	
+			break;
+	}	
+
+	return mdp_format;
+}
+
+static int
+msmv4l2_get_buffer_mem_offset(struct v4l2_buffer *buffer, unsigned long* offset)
+{
+	int rc = 0;
+
+	struct vm_area_struct *vma;
+
+	down_read(&current->mm->mmap_sem);
+
+	if (!(vma = find_vma(current->mm, buffer->m.userptr))
+		|| (vma->vm_start > buffer->m.userptr)
+		|| (vma->vm_end < buffer->m.userptr)) {
+		rc = -EINVAL;
+		goto exit;
+	}
+
+	*offset = buffer->m.userptr - vma->vm_start;
+
+	DLOG("userptr=0x%X vm_start=0x%X vm_end=0x%X -> offset=0x%X\n",
+		(unsigned int)buffer->m.userptr, 
+		(unsigned int)vma->vm_start, 
+		(unsigned int)vma->vm_end, 
+		(unsigned int)*offset);
+
+exit:
+ 	up_read(&current->mm->mmap_sem);
+
+	return rc;
+}
+
+static int 
+msmv4l2_fb_update(struct msmv4l2_device *vout, struct v4l2_buffer *buffer)
+{
+	int ret;
+	int put_needed;	
+	unsigned long offset=0;
+	struct file *f;
+
+	MSMV4L2_PROFILE_START;
+
+	memset (&vout->req, 0, sizeof(struct mdp_blit_int_req));
+
+	//Src dimensions
 	vout->req.src.width = vout->pix.width;
 	vout->req.src.height = vout->pix.height;
 
+	//Crop of the Src 
 	vout->req.src_rect.x = vout->crop_rect.left;
 	vout->req.src_rect.y = vout->crop_rect.top;
 	vout->req.src_rect.w = vout->crop_rect.width;
 	vout->req.src_rect.h = vout->crop_rect.height;
 
-	vout->req.src.format =
-		msm_v4l2_overlay_mapformat(vout->pix.pixelformat);
+	vout->req.src.format = msmv4l2_mapformat(vout->pix.pixelformat);
+	msmv4l2_get_buffer_mem_offset(buffer, &offset);
+	vout->req.src.offset = offset;
+
+	f = fget_light(buffer->reserved, &put_needed);
+	vout->req.src.filp = f;
+	fput_light(f, put_needed);
+
+	//Dest size (Screen size)
+	vout->req.dst.width = vout->screen_width;
+	vout->req.dst.height = vout->screen_height; 
 
 	vout->req.dst_rect.x = vout->win.w.left;
 	vout->req.dst_rect.y = vout->win.w.top;
@@ -63,885 +212,480 @@ static int msm_v4l2_overlay_startstreaming(struct msm_v4l2_overlay_device *vout)
 
 	vout->req.alpha = MDP_ALPHA_NOP;
 	vout->req.transp_mask = MDP_TRANSP_NOP;
+	vout->req.flags = MDP_ROT_NOP;
 
-	pr_debug("msm_v4l2_overlay:startstreaming:enabling fb\n");
+	DLOG("SRC: width=%d, height=%d, filp=0x%x offset=0x%x\n", 
+		vout->req.src.width, vout->req.src.height, 
+		(unsigned int)vout->req.src.filp, vout->req.src.offset);
+	DLOG("DST: width=%d, height=%d, filp=0x%x\n", 
+		vout->req.dst.width, vout->req.dst.height, 
+		(unsigned int)vout->req.dst.filp);
+
+
+	/*
+	 * Push frame to msmfb. 
+	 */
 	mutex_lock(&msmfb_lock);
-	msm_fb_v4l2_enable(&vout->req, true, &vout->par);
+
+	ret = msm_fb_v4l2_update(&vout->req, 
+		(vout->id == 0)? MSMV4L2_LAYER0 : MSMV4L2_LAYER1);
+
 	mutex_unlock(&msmfb_lock);
 
-	vout->streaming = 1;
-
-	return 0;
-}
-
-static int msm_v4l2_overlay_stopstreaming(struct msm_v4l2_overlay_device *vout)
-{
-	if (!vout->streaming)
-		return 0;
-
-	pr_debug("msm_v4l2_overlay:startstreaming:disabling fb\n");
-	mutex_lock(&msmfb_lock);
-	msm_fb_v4l2_enable(&vout->req, false, &vout->par);
-	mutex_unlock(&msmfb_lock);
-
-	vout->streaming = 0;
-
-	return 0;
-}
-
-static int msm_v4l2_overlay_mapformat(uint32_t pixelformat)
-{
-	int mdp_format;
-
-	switch (pixelformat) {
-	case V4L2_PIX_FMT_RGB565:
-		mdp_format = MDP_RGB_565;
-		break;
-	case V4L2_PIX_FMT_RGB32:
-		mdp_format = MDP_ARGB_8888;
-		break;
-	case V4L2_PIX_FMT_RGB24:
-		mdp_format = MDP_RGB_888;
-		break;
-	case V4L2_PIX_FMT_NV12:
-		mdp_format = MDP_Y_CRCB_H2V2;
-		break;
-	case V4L2_PIX_FMT_NV21:
-		mdp_format = MDP_Y_CBCR_H2V2;
-		break;
-	case V4L2_PIX_FMT_YUV420:
-		mdp_format = MDP_Y_CR_CB_H2V2;
-		break;
-	default:
-		pr_err("%s:Unrecognized format %u\n", __func__, pixelformat);
-		mdp_format = MDP_Y_CBCR_H2V2;
-		break;
-	}
-
-	return mdp_format;
-}
-
-static int
-msm_v4l2_overlay_fb_update(struct msm_v4l2_overlay_device *vout,
-	struct v4l2_buffer *buffer)
-{
-	int ret;
-	unsigned long src_addr, src_size;
-	struct msm_v4l2_overlay_userptr_buffer up_buffer;
-
-	if (!buffer ||
-		(buffer->memory == V4L2_MEMORY_MMAP &&
-		 buffer->index >= vout->numbufs))
-		return -EINVAL;
-
-	mutex_lock(&msmfb_lock);
-	switch (buffer->memory) {
-	case V4L2_MEMORY_MMAP:
-		src_addr = (unsigned long)v4l2_ram_phys
-		+ vout->bufs[buffer->index].offset;
-		src_size = buffer->bytesused;
-		ret = msm_fb_v4l2_update(vout->par, src_addr, src_size,
-		0, 0, 0, 0);
-		break;
-	case V4L2_MEMORY_USERPTR:
-		if (copy_from_user(&up_buffer,
-		(void __user *)buffer->m.userptr,
-		sizeof(struct msm_v4l2_overlay_userptr_buffer))) {
-			mutex_unlock(&msmfb_lock);
-			return -EINVAL;
-		}
-		ret = msm_fb_v4l2_update(vout->par,
-		(unsigned long)up_buffer.base[0], up_buffer.length[0],
-		(unsigned long)up_buffer.base[1], up_buffer.length[1],
-		(unsigned long)up_buffer.base[2], up_buffer.length[2]);
-		break;
-	default:
-		mutex_unlock(&msmfb_lock);
-		return -EINVAL;
-	}
-	mutex_unlock(&msmfb_lock);
-
-	if (buffer->memory == V4L2_MEMORY_MMAP) {
-		vout->bufs[buffer->index].queued = 1;
-		buffer->flags |= V4L2_BUF_FLAG_MAPPED;
-	}
-	buffer->flags |= V4L2_BUF_FLAG_QUEUED;
+	MSMV4L2_PROFILE_END("Time taken for pass 1: ");
 
 	return ret;
 }
 
-static int
-msm_v4l2_overlay_vidioc_dqbuf(struct file *file,
-	struct msm_v4l2_overlay_fh *fh, void *arg)
+static int 
+msmv4l2_vidioc_qbuf(struct file *file, struct msmv4l2_fh* fh, void *arg)
 {
-	struct msm_v4l2_overlay_device *vout = fh->vout;
-	struct v4l2_buffer *buffer = arg;
-	int i;
-
-	if (!vout->streaming) {
-		pr_err("%s: Video Stream not enabled\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!buffer || buffer->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
-		return -EINVAL;
-
-	if (buffer->memory == V4L2_MEMORY_MMAP) {
-		for (i = 0; i < vout->numbufs; i++) {
-			if (vout->bufs[i].queued == 1)  {
-				vout->bufs[i].queued = 0;
-				/* Call into fb to remove this buffer? */
-				break;
-			}
-		}
-
-		/*
-		 * This should actually block, unless O_NONBLOCK was
-		 *  specified in open, but fine for now, especially
-		 *  since this is not a capturing device
-		 */
-		if (i == vout->numbufs)
-			return -EAGAIN;
-	}
-
-	buffer->flags &= ~V4L2_BUF_FLAG_QUEUED;
-
-	return 0;
-}
-
-
-static int
-msm_v4l2_overlay_vidioc_qbuf(struct file *file, struct msm_v4l2_overlay_fh* fh,
-	void *arg, bool bUserPtr)
-{
-	struct msm_v4l2_overlay_device *vout = fh->vout;
-	struct v4l2_buffer *buffer = arg;
+	struct msmv4l2_device *vout = fh->vout;
+	struct v4l2_buffer *buffer = (struct v4l2_buffer *) arg;
 	int ret;
 
-	if (!bUserPtr && buffer->memory != V4L2_MEMORY_MMAP)
-		return -EINVAL;
+	DLOG("VIDIOC_QBUF: buffer=0x%X, fd=%d\n", 
+		(unsigned int)buffer->m.userptr, buffer->reserved);
 
-	if (!vout->streaming) {
-		pr_err("%s: Video Stream not enabled\n", __func__);
+	if(!vout->streaming) {
+		printk(KERN_ERR "msmv4l2: Video Stream not enabled\n");
 		return -EINVAL;
 	}
 
-	if (!buffer || buffer->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
-		return -EINVAL;
+	DLOG("VIDIOC_QBUF: buffer=0x%X, fd=%d\n", 
+		(unsigned int)buffer->m.userptr, buffer->reserved);
 
-	/* maybe allow only one qbuf at a time? */
-	ret =  msm_v4l2_overlay_fb_update(vout, buffer);
-
-	return 0;
-}
-
-static int
-msm_v4l2_overlay_vidioc_querycap(struct file *file, void *arg)
-{
-	struct v4l2_capability *buffer = arg;
-
-	memset(buffer, 0, sizeof(struct v4l2_capability));
-	strlcpy(buffer->driver, "msm_v4l2_video_overlay",
-		ARRAY_SIZE(buffer->driver));
-	strlcpy(buffer->card, "MSM MDP",
-		ARRAY_SIZE(buffer->card));
-	buffer->capabilities = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_OUTPUT
-		| V4L2_CAP_VIDEO_OVERLAY;
-	return 0;
-}
-
-static int
-msm_v4l2_overlay_vidioc_fbuf(struct file *file,
-	struct msm_v4l2_overlay_device *vout, void *arg, bool get)
-{
-	struct v4l2_framebuffer *fb = arg;
-
-	if (fb == NULL)
-		return -EINVAL;
-
-	if (get) {
-		mutex_lock(&vout->update_lock);
-		memcpy(&fb->fmt, &vout->pix, sizeof(struct v4l2_pix_format));
-		mutex_unlock(&vout->update_lock);
-	}
-	/* The S_FBUF request does not store anything right now */
-	return 0;
-}
-
-static long msm_v4l2_overlay_calculate_bufsize(struct v4l2_pix_format *pix)
-{
-	int bpp;
-	long bufsize;
-	switch (pix->pixelformat) {
-	case V4L2_PIX_FMT_YUV420:
-	case V4L2_PIX_FMT_NV12:
-		bpp = 12;
-		break;
-
-	case V4L2_PIX_FMT_RGB565:
-		bpp = 16;
-		break;
-
-	case V4L2_PIX_FMT_RGB24:
-	case V4L2_PIX_FMT_BGR24:
-	case V4L2_PIX_FMT_YUV444:
-		bpp = 24;
-		break;
-
-	case V4L2_PIX_FMT_RGB32:
-	case V4L2_PIX_FMT_BGR32:
-		bpp = 32;
-		break;
-	default:
-		pr_err("%s: Unrecognized format %u\n", __func__,
-		pix->pixelformat);
-		bpp = 0;
-	}
-
-	bufsize = (pix->width * pix->height * bpp)/8;
-
-	return bufsize;
-}
-
-static long
-msm_v4l2_overlay_vidioc_reqbufs(struct file *file,
-	struct msm_v4l2_overlay_device *vout, void *arg)
-
-{
-	struct v4l2_requestbuffers *rqb = arg;
-	long bufsize;
-	int i;
-
-	if (rqb == NULL || rqb->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
-		return -EINVAL;
-
-	if (rqb->memory == V4L2_MEMORY_MMAP) {
-		if (rqb->count == 0) {
-			/* Deallocate allocated buffers */
-			mutex_lock(&vout->update_lock);
-			vout->numbufs = 0;
-			kfree(vout->bufs);
-			/*
-			 * There should be a way to look at bufs[i]->mapped,
-			 * and prevent userspace from mmaping and directly
-			 * calling this ioctl without unmapping. Maybe kernel
-			 * handles for us, but needs to be checked out
-			 */
-			mutex_unlock(&vout->update_lock);
-		} else {
-			/*
-			 * Keep it simple for now - need to deallocate
-			 * before reallocate
-			 */
-			if (vout->bufs)
-				return -EINVAL;
-
-			mutex_lock(&vout->update_lock);
-			bufsize =
-				msm_v4l2_overlay_calculate_bufsize(&vout->pix);
-			mutex_unlock(&vout->update_lock);
-
-			if (bufsize == 0
-				|| (bufsize * rqb->count) > v4l2_ram_size) {
-				pr_err("%s: Unsupported format or buffer size too large\n",
-				__func__);
-				pr_err("%s: bufsize %lu ram_size %u count %u\n",
-				__func__, bufsize, v4l2_ram_size, rqb->count);
-				return -EINVAL;
-			}
-
-			/*
-			 * We don't support multiple open of one vout,
-			 * but there are probably still some MT problems here,
-			 * (what if same fh is shared between two userspace
-			 * threads and they both call REQBUFS etc)
-			 */
-
-			mutex_lock(&vout->update_lock);
-			vout->numbufs = rqb->count;
-			vout->bufs =
-				kmalloc(rqb->count *
-					sizeof(struct msm_v4l2_overlay_buffer),
-					GFP_KERNEL);
-
-			for (i = 0; i < rqb->count; i++) {
-				struct msm_v4l2_overlay_buffer *b =
-				(struct msm_v4l2_overlay_buffer *)vout->bufs
-				+ i;
-				b->mapped = 0;
-				b->queued = 0;
-				b->offset = PAGE_ALIGN(bufsize*i);
-				b->bufsize = bufsize;
-			}
-
-			mutex_unlock(&vout->update_lock);
-
-		}
-	}
+	ret =  msmv4l2_fb_update( vout, buffer );
 
 	return 0;
 }
 
-static long
-msm_v4l2_overlay_vidioc_querybuf(struct file *file,
-				 struct msm_v4l2_overlay_device *vout,
-				 void *arg)
-{
-	struct v4l2_buffer *buf = arg;
-	struct msm_v4l2_overlay_buffer *mbuf;
 
-	if (buf == NULL || buf->type != V4L2_BUF_TYPE_VIDEO_OUTPUT
-			|| buf->memory == V4L2_MEMORY_USERPTR
-			|| buf->index >= vout->numbufs)
-		return -EINVAL;
-
-	mutex_lock(&vout->update_lock);
-
-	mbuf = (struct msm_v4l2_overlay_buffer *)vout->bufs + buf->index;
-	buf->flags = 0;
-	if (mbuf->mapped)
-		buf->flags |= V4L2_BUF_FLAG_MAPPED;
-	if (mbuf->queued)
-		buf->flags |= V4L2_BUF_FLAG_QUEUED;
-
-	buf->memory = V4L2_MEMORY_MMAP;
-	buf->length = mbuf->bufsize;
-	buf->m.offset = mbuf->offset;
-
-	mutex_unlock(&vout->update_lock);
-
-	return 0;
-}
-
-static long
-msm_v4l2_overlay_do_ioctl(struct file *file,
+static long 
+msmv4l2_do_ioctl (struct file *file,
 		       unsigned int cmd, void *arg)
 {
-	struct msm_v4l2_overlay_fh *fh = file->private_data;
-	struct msm_v4l2_overlay_device *vout = fh->vout;
+	struct msmv4l2_fh *fh = (struct msmv4l2_fh *)file->private_data;
+	struct msmv4l2_device *vout = fh->vout;
 	int ret;
 
-	switch (cmd) {
-	case VIDIOC_QUERYCAP:
-		return msm_v4l2_overlay_vidioc_querycap(file, arg);
+	DLOG("msmv4l2_do_ioctl: cmd=0x%x\n", cmd);
 
-	case VIDIOC_G_FBUF:
-		return msm_v4l2_overlay_vidioc_fbuf(file, vout, arg, true);
-
-	case VIDIOC_S_FBUF:
-		return msm_v4l2_overlay_vidioc_fbuf(file, vout, arg, false);
-
+	switch (cmd){
 	case VIDIOC_REQBUFS:
-		return msm_v4l2_overlay_vidioc_reqbufs(file, vout, arg);
-
-	case VIDIOC_QUERYBUF:
-		return msm_v4l2_overlay_vidioc_querybuf(file, vout, arg);
+		DLOG("VIDIOC_REQBUFS\n");
+		break;
 
 	case VIDIOC_QBUF:
 		mutex_lock(&vout->update_lock);
-		ret = msm_v4l2_overlay_vidioc_qbuf(file, fh, arg, false);
+		ret = msmv4l2_vidioc_qbuf(file, fh, arg);
 		mutex_unlock(&vout->update_lock);
 
 		return ret;
-
-	case VIDIOC_MSM_USERPTR_QBUF:
-		if (!capable(CAP_SYS_RAWIO))
-			return -EPERM;
-
-		mutex_lock(&vout->update_lock);
-		ret = msm_v4l2_overlay_vidioc_qbuf(file, fh, arg, true);
-		mutex_unlock(&vout->update_lock);
-
-		return ret;
-
+	
 	case VIDIOC_DQBUF:
-		mutex_lock(&vout->update_lock);
-		ret = msm_v4l2_overlay_vidioc_dqbuf(file, fh, arg);
-		mutex_unlock(&vout->update_lock);
+		DLOG("VIDIOC_DQBUF\n");
 		break;
 
 	case VIDIOC_S_FMT: {
-		struct v4l2_format *f = arg;
+		struct v4l2_format *f = (struct v4l2_format *) arg;
+		DLOG("VIDIOC_S_FMT\n");
 
-		switch (f->type) {
-		case V4L2_BUF_TYPE_VIDEO_OVERLAY:
-			mutex_lock(&vout->update_lock);
-			memcpy(&vout->win, &f->fmt.win,
-				sizeof(struct v4l2_window));
-			mutex_unlock(&vout->update_lock);
-			break;
+#ifdef CONFIG_FB_MSM_MDP30
+		//Only needed for 7x27 to make sure the userspace to 
+		//blank the screen before reformatting
+		if(vout->streaming)
+			return -EBUSY;
+#endif
 
-		case V4L2_BUF_TYPE_VIDEO_OUTPUT:
-			mutex_lock(&vout->update_lock);
-			memcpy(&vout->pix, &f->fmt.pix,
-				sizeof(struct v4l2_pix_format));
-			mutex_unlock(&vout->update_lock);
-			break;
+		switch(f->type){
+			case V4L2_BUF_TYPE_VIDEO_OVERLAY: {
 
-		default:
-			return -EINVAL;
+				mutex_lock(&vout->update_lock);
+				memcpy(&vout->win, &f->fmt.win, sizeof(struct v4l2_window));
+				mutex_unlock(&vout->update_lock);
+
+				DLOG("Overlay Window: left=%d, top=%d, width=%d, height=%d\n",
+					vout->win.w.left, vout->win.w.top, vout->win.w.width,
+					vout->win.w.height);
+
+				break;
+			}
+			case V4L2_BUF_TYPE_VIDEO_OUTPUT: {				
+
+				mutex_lock(&vout->update_lock);
+				memcpy(&vout->pix, &f->fmt.pix, sizeof(struct v4l2_pix_format));
+				mutex_unlock(&vout->update_lock);
+
+				DLOG("Pixel Data: format=%d, width=%d, height=%d\n",
+					vout->pix.pixelformat, vout->pix.width, vout->pix.height);
+		
+				break;
+			}
+			default:
+				return -EINVAL;
 		}
 		break;
 	}
 	case VIDIOC_G_FMT: {
-		struct v4l2_format *f = arg;
+		struct v4l2_format *f = (struct v4l2_format *) arg;
+		DLOG("VIDIOC_G_FMT\n");
 
-		switch (f->type) {
-		case V4L2_BUF_TYPE_VIDEO_OUTPUT: {
-			struct v4l2_pix_format *pix = &f->fmt.pix;
-			memset(pix, 0, sizeof(*pix));
-			*pix = vout->pix;
-			break;
+		switch (f->type){
+			case V4L2_BUF_TYPE_VIDEO_OUTPUT: {
+				struct v4l2_pix_format *pix = &f->fmt.pix;
+				memset (pix, 0, sizeof (*pix));
+				*pix = vout->pix;
+				break;
+			}
+
+			case V4L2_BUF_TYPE_VIDEO_OVERLAY: {
+				struct v4l2_window *win = &f->fmt.win;
+				memset (win, 0, sizeof (*win));
+				win->w = vout->win.w;
+				break;
+			}
+			default:
+				return -EINVAL;
 		}
-
-		case V4L2_BUF_TYPE_VIDEO_OVERLAY: {
-			struct v4l2_window *win = &f->fmt.win;
-			memset(win, 0, sizeof(*win));
-			win->w = vout->win.w;
-			break;
-		}
-		default:
-			return -EINVAL;
-		}
-		break;
-	}
-
-	case VIDIOC_CROPCAP: {
-		struct v4l2_cropcap *cr = arg;
-		if (cr->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
-			return -EINVAL;
-
-		cr->bounds.left =  0;
-		cr->bounds.top = 0;
-		cr->bounds.width = vout->crop_rect.width;
-		cr->bounds.height = vout->crop_rect.height;
-
-		cr->defrect.left =  0;
-		cr->defrect.top = 0;
-		cr->defrect.width = vout->crop_rect.width;
-		cr->defrect.height = vout->crop_rect.height;
-
-		cr->pixelaspect.numerator = 1;
-		cr->pixelaspect.denominator = 1;
 		break;
 	}
 
 	case VIDIOC_S_CROP: {
-		struct v4l2_crop *crop = arg;
+		struct v4l2_crop *crop = (struct v4l2_crop *) arg;
+		DLOG("VIDIOC_S_CROP\n");
 
-		switch (crop->type) {
+		switch(crop->type) {
 
-		case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+			case V4L2_BUF_TYPE_VIDEO_OUTPUT:
 
-			mutex_lock(&vout->update_lock);
-			memcpy(&vout->crop_rect, &crop->c,
-				sizeof(struct v4l2_rect));
-			mutex_unlock(&vout->update_lock);
+				mutex_lock(&vout->update_lock);
+				memcpy(&vout->crop_rect, &crop->c, sizeof(struct v4l2_rect));
+				mutex_unlock(&vout->update_lock);
 
-			break;
+				DLOG("New Crop Rect: left=%d, top=%d, width=%d, height=%d\n",
+					vout->crop_rect.left, vout->crop_rect.top, 
+					vout->crop_rect.width, vout->crop_rect.height);
+				break;
 
-		default:
+			default:
 
-			return -EINVAL;
+				return -EINVAL;
 		}
 		break;
 	}
 	case VIDIOC_G_CROP: {
-		struct v4l2_crop *crop = arg;
-
+		struct v4l2_crop *crop = (struct v4l2_crop *) arg;
+		DLOG("VIDIOC_G_CROP\n");
+		
 		switch (crop->type) {
 
-		case V4L2_BUF_TYPE_VIDEO_OUTPUT:
-			memcpy(&crop->c, &vout->crop_rect,
-				sizeof(struct v4l2_rect));
-			break;
-
-		default:
-			return -EINVAL;
-		}
-		break;
-	}
-
-	case VIDIOC_S_CTRL: {
-		struct v4l2_control *ctrl = arg;
-		int32_t rotflag;
-
-		switch (ctrl->id) {
-
-		case V4L2_CID_ROTATE:
-			switch (ctrl->value) {
-			case 0:
-				rotflag = MDP_ROT_NOP;
+			case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+				memcpy(&crop->c, &vout->crop_rect, sizeof(struct v4l2_rect));
 				break;
-			case 90:
-				rotflag = MDP_ROT_90;
-				break;
-			case 180:
-				rotflag = MDP_ROT_180;
-				break;
-			case 270:
-				rotflag = MDP_ROT_270;
-				break;
+
 			default:
-				pr_err("%s: V4L2_CID_ROTATE invalid rotation value %d.\n",
-						__func__, ctrl->value);
-				return -ERANGE;
-			}
-
-			mutex_lock(&vout->update_lock);
-			/* Clear the rotation flags */
-			vout->req.flags &= ~MDP_ROT_NOP;
-			vout->req.flags &= ~MDP_ROT_90;
-			vout->req.flags &= ~MDP_ROT_180;
-			vout->req.flags &= ~MDP_ROT_270;
-			/* Set the new rotation flag */
-			vout->req.flags |= rotflag;
-			mutex_unlock(&vout->update_lock);
-
-			break;
-
-		case V4L2_CID_HFLIP:
-			mutex_lock(&vout->update_lock);
-			/* Clear the flip flag */
-			vout->req.flags &= ~MDP_FLIP_LR;
-			if (true == ctrl->value)
-				vout->req.flags |= MDP_FLIP_LR;
-			mutex_unlock(&vout->update_lock);
-
-			break;
-
-		case V4L2_CID_VFLIP:
-			mutex_lock(&vout->update_lock);
-			/* Clear the flip flag */
-			vout->req.flags &= ~MDP_FLIP_UD;
-			if (true == ctrl->value)
-				vout->req.flags |= MDP_FLIP_UD;
-			mutex_unlock(&vout->update_lock);
-
-			break;
-
-		default:
-			pr_err("%s: VIDIOC_S_CTRL invalid control ID %d.\n",
-			__func__, ctrl->id);
-			return -EINVAL;
+				return -EINVAL;
 		}
 		break;
 	}
-	case VIDIOC_G_CTRL: {
-		struct v4l2_control *ctrl = arg;
-		__s32 rotation;
-
-		switch (ctrl->id) {
-
-		case V4L2_CID_ROTATE:
-			if (MDP_ROT_NOP == (vout->req.flags & MDP_ROT_NOP))
-				rotation = 0;
-			if (MDP_ROT_90 == (vout->req.flags & MDP_ROT_90))
-				rotation = 90;
-			if (MDP_ROT_180 == (vout->req.flags & MDP_ROT_180))
-				rotation = 180;
-			if (MDP_ROT_270 == (vout->req.flags & MDP_ROT_270))
-				rotation = 270;
-
-			ctrl->value = rotation;
-			break;
-
-		case V4L2_CID_HFLIP:
-			if (MDP_FLIP_LR == (vout->req.flags & MDP_FLIP_LR))
-				ctrl->value = true;
-			break;
-
-		case V4L2_CID_VFLIP:
-			if (MDP_FLIP_UD == (vout->req.flags & MDP_FLIP_UD))
-				ctrl->value = true;
-			break;
-
-		default:
-			pr_err("%s: VIDIOC_G_CTRL invalid control ID %d.\n",
-			__func__, ctrl->id);
-			return -EINVAL;
-		}
-		break;
-	}
-
 	case VIDIOC_STREAMON: {
+		DLOG("VIDIOC_STREAMON\n");
 
-		if (vout->streaming) {
-			pr_err("%s: VIDIOC_STREAMON: already streaming.\n",
-			__func__);
+		if(vout->streaming) {
+			printk(KERN_ERR "msmv4l2: VIDIOC_STREAMON: already streaming.\n");
 			return -EBUSY;
 		}
-
+		
 		mutex_lock(&vout->update_lock);
-		msm_v4l2_overlay_startstreaming(vout);
+		msmv4l2_startstreaming(vout);
 		mutex_unlock(&vout->update_lock);
 
 		break;
 	}
 
 	case VIDIOC_STREAMOFF: {
+		DLOG("VIDIOC_STREAMOFF\n");
 
-		if (!vout->streaming) {
-			pr_err("%s: VIDIOC_STREAMOFF: not currently streaming.\n",
-			__func__);
+		if(!vout->streaming) {
+			printk(KERN_ERR "msmv4l2: VIDIOC_STREAMOFF: Invalid IOCTL request.\n");
 			return -EINVAL;
 		}
 
 		mutex_lock(&vout->update_lock);
-		msm_v4l2_overlay_stopstreaming(vout);
+		msmv4l2_stopstreaming( vout );
 		mutex_unlock(&vout->update_lock);
 
 		break;
 	}
 
-	default:
-		return -ENOIOCTLCMD;
+	case VIDIOC_S_MSM_ROTATION: { 
 
-	} /* switch */
-
-	return 0;
-}
-
-static long
-msm_v4l2_overlay_ioctl(struct file *file, unsigned int cmd,
-		    unsigned long arg)
-{
-	return video_usercopy(file, cmd, arg, msm_v4l2_overlay_do_ioctl);
-}
-
-static int
-msm_v4l2_overlay_mmap(struct file *filp, struct vm_area_struct * vma)
-{
-	unsigned long start = (unsigned long)v4l2_ram_phys;
-
-	/*
-	 * vm_pgoff is the offset (>>PAGE_SHIFT) that we provided
-	 * during REQBUFS. off therefore should equal the offset we
-	 * provided in REQBUFS, since last (PAGE_SHIFT) bits of off
-	 * should be 0
-	 */
-	unsigned long off = vma->vm_pgoff << PAGE_SHIFT;
-	u32 len = PAGE_ALIGN((start & ~PAGE_MASK) + v4l2_ram_size);
-
-	/*
-	 * This is probably unnecessary now - the last PAGE_SHIFT
-	 * bits of start should be 0 now, since we are page aligning
-	 * v4l2_ram_phys
-	 */
-	start &= PAGE_MASK;
-
-	pr_debug("v4l2 map req for phys(%p,%p) offset %u to virt (%p,%p)\n",
-	(void *)(start+off), (void *)(start+off+(vma->vm_end - vma->vm_start)),
-	(unsigned int)off, (void *)vma->vm_start, (void *)vma->vm_end);
-
-	if ((vma->vm_end - vma->vm_start + off) > len) {
-		pr_err("v4l2 map request, memory requested too big\n");
-		return -EINVAL;
+		printk(KERN_ERR "msmv4l2: VIDIOC_S_MSM_ROTATION not supported\n"); 
+		break;
 	}
 
-	start += off;
-	vma->vm_pgoff = start >> PAGE_SHIFT;
-	/* This is an IO map - tell maydump to skip this VMA */
-	vma->vm_flags |= VM_IO | VM_RESERVED;
+	case VIDIOC_G_MSM_ROTATION: {
 
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		printk(KERN_ERR "msmv4l2: VIDIOC_G_MSM_ROTATION not supported\n"); 
+		break;
+	}
 
-	/* Remap the frame buffer I/O range */
-	if (io_remap_pfn_range(vma, vma->vm_start, start >> PAGE_SHIFT,
-				vma->vm_end - vma->vm_start,
-				vma->vm_page_prot))
-		return -EAGAIN;
+	case VIDIOC_S_MSM_FB_INFO: {
+		DLOG("VIDIOC_S_MSM_FB_INFO deprecated\n");
+	}
+	break;
+	case VIDIOC_G_MSM_FB_INFO: {
+		int *fd = arg;
+		DLOG("VIDIOC_G_MSM_FB_INFO deprecated\n");
+		*fd = -1;
+	}
+	break;
+
+	case VIDIOC_G_LAST_FRAME: {
+		printk(KERN_ERR "msmv4l2: VIDIOC_G_LAST_FRAME: Not implemented\n");
+		return -EFAULT;
+	}
+	break;
+
+	default:
+		DLOG("Unrecognized IOCTL\n");
+		return -ENOIOCTLCMD;
+
+	}/* switch */
 
 	return 0;
 }
 
-static int
-msm_v4l2_overlay_release(struct file *file)
+static long 
+msmv4l2_ioctl (struct file *file, unsigned int cmd,
+		    unsigned long arg)
 {
-	struct msm_v4l2_overlay_fh *fh = file->private_data;
-	struct msm_v4l2_overlay_device *vout = fh->vout;
+	return video_usercopy (file, cmd, arg, msmv4l2_do_ioctl);
+}
 
-	if (vout->streaming)
-		msm_v4l2_overlay_stopstreaming(vout);
+int
+msmv4l2_release(struct file *file)
+{
+	struct msmv4l2_fh *fh = file->private_data;
+	struct msmv4l2_device *vout = fh->vout;
+
+	if(vout->streaming)
+ 		msmv4l2_stopstreaming( vout );
 
 	vout->ref_count--;
 
-	kfree(vout->bufs);
-	vout->numbufs = 0;
 	kfree(fh);
 
 	return 0;
 }
 
-static int
-msm_v4l2_overlay_open(struct file *file)
+int
+msmv4l2_open(struct file *file)
 {
-	struct msm_v4l2_overlay_device	*vout = NULL;
-	struct v4l2_pix_format	*pix = NULL;
-	struct msm_v4l2_overlay_fh *fh;
+	struct msmv4l2_device 	*vout = 0;
+	struct v4l2_pix_format	*pix = 0;
+	struct msmv4l2_fh *fh;
 
-	vout = saved_vout0;
-	vout->id = 0;
+	struct inode *inode = file->f_path.dentry->d_inode;
+	int video_idx = iminor(inode);
 
-	if (vout->ref_count) {
-		pr_err("%s: multiple open currently is not"
-		"supported!\n", __func__);
+	DLOG("msmv4l2_open+++ %d\n", video_idx);
+
+	if(video_idx == 0) {
+		vout = saved_vout0;
+		vout->id = 0;
+	}
+	else if(video_idx == 1) {
+		vout = saved_vout1;
+		vout->id = 1;
+	}
+
+	if (!vout) {
+		printk (KERN_ERR "msmv4l2_open: no context\n");
 		return -EBUSY;
 	}
 
+	if (vout->ref_count) {
+		printk (KERN_ERR "msmv4l2_open: multiple open currently is not supported!\n");
+		return -EBUSY;
+	}
+
+	// Increment reference count
 	vout->ref_count++;
 
 	/* allocate per-filehandle data */
-	fh = kmalloc(sizeof(struct msm_v4l2_overlay_fh), GFP_KERNEL);
-	if (NULL == fh)
+	fh = kmalloc (sizeof(struct msmv4l2_fh), GFP_KERNEL);
+	if (NULL == fh) {
+		printk (KERN_ERR "msmv4l2_open: kmalloc failed\n");
 		return -ENOMEM;
+	}
 
 	fh->vout = vout;
 	fh->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 
+	if(!file)
+		printk("Empty file!!\n");
 	file->private_data = fh;
 
-	vout->streaming		= 0;
-	vout->crop_rect.left	= vout->crop_rect.top = 0;
-	vout->crop_rect.width	= vout->screen_width;
-	vout->crop_rect.height	= vout->screen_height;
+	vout->streaming 	= 0;
+	vout->crop_rect.left 	= vout->crop_rect.top = 0;
+	vout->crop_rect.width 	= vout->screen_width;
+	vout->crop_rect.height 	= vout->screen_height;
 
-	pix				= &vout->pix;
-	pix->width			= vout->screen_width;
-	pix->height		= vout->screen_height;
-	pix->pixelformat	= V4L2_PIX_FMT_RGB32;
-	pix->field			= V4L2_FIELD_NONE;
-	pix->bytesperline	= pix->width * 4;
-	pix->sizeimage		= pix->bytesperline * pix->height;
-	pix->priv			= 0;
-	pix->colorspace		= V4L2_COLORSPACE_SRGB;
+	pix 				= &vout->pix;
+	pix->width 			= vout->screen_width;
+	pix->height 		= vout->screen_height;
+	pix->pixelformat 	= V4L2_PIX_FMT_RGB32;
+	pix->field 			= V4L2_FIELD_NONE;
+	pix->bytesperline 	= pix->width * 4;
+	pix->sizeimage 		= pix->bytesperline * pix->height;
+	pix->priv 			= 0;
+	pix->colorspace 	= V4L2_COLORSPACE_SRGB;
 
-	vout->win.w.left	= 0;
-	vout->win.w.top		= 0;
-	vout->win.w.width	= vout->screen_width;
-	vout->win.w.height	= vout->screen_height;
-
-	vout->fb.capability = V4L2_FBUF_CAP_EXTERNOVERLAY
-		| V4L2_FBUF_CAP_LOCAL_ALPHA;
-	vout->fb.flags = V4L2_FBUF_FLAG_LOCAL_ALPHA;
-	vout->fb.base = 0;
-	memcpy(&vout->fb.fmt, pix, sizeof(struct v4l2_format));
-
-	vout->bufs = 0;
-	vout->numbufs = 0;
+	vout->win.w.left 	= 0;
+	vout->win.w.top 	= 0;
+	vout->win.w.width 	= vout->screen_width;
+	vout->win.w.height 	= vout->screen_height;
 
 	mutex_init(&vout->update_lock);
 
 	return 0;
 }
 
+static int 
+msmv4l2_probe(struct platform_device *pdev)
+{	
+	//struct msmv4l2_device	*vout; 	
+	//struct msm_v4l2_pd		*pi = pdev->dev.platform_data;
 
-static int __devinit
-msm_v4l2_overlay_probe(struct platform_device *pdev)
-{
-	char *v4l2_ram_phys_unaligned;
-	if ((pdev->id == 0) && (pdev->num_resources > 0)) {
-		v4l2_ram_size =
-			pdev->resource[0].end - pdev->resource[0].start + 1;
-		v4l2_ram_phys_unaligned = (char *)pdev->resource[0].start;
-		v4l2_ram_phys =
-		(char *)PAGE_ALIGN((unsigned int)v4l2_ram_phys_unaligned);
-		/*
-		 * We are (fwd) page aligning the start of v4l2 memory.
-		 * Therefore we have that much less physical memory available
-		 */
-		v4l2_ram_size -= (unsigned int)v4l2_ram_phys
-			- (unsigned int)v4l2_ram_phys_unaligned;
+	//TODO: Specify certain restrictions in board file 
+	DLOG("msmv4l2_probe+++\n");
 
 
-	}
 	return 0;
 }
 
-static int __devexit
-msm_v4l2_overlay_remove(struct platform_device *pdev)
+static int msmv4l2_remove(struct platform_device *pdev)
 {
+	DLOG("msmv4l2_remove+++\n");
+
 	return 0;
 }
 
-static void msm_v4l2_overlay_videodev_release(struct video_device *vfd)
+void msmv4l2_videodev_release(struct video_device *vfd)
 {
+	DLOG("msmv4l2_videodev_release+++\n");
+
 	return;
 }
 
-static const struct v4l2_file_operations msm_v4l2_overlay_fops = {
+static const struct v4l2_file_operations msmv4l2_fops = {
 	.owner		= THIS_MODULE,
-	.open		= msm_v4l2_overlay_open,
-	.release	= msm_v4l2_overlay_release,
-	.mmap		= msm_v4l2_overlay_mmap,
-	.ioctl		= msm_v4l2_overlay_ioctl,
+	.open		= msmv4l2_open,
+	.release	= msmv4l2_release,
+	.ioctl		= msmv4l2_ioctl,
 };
 
-static struct video_device msm_v4l2_overlay_vid_device0 = {
-	.name		= "msm_v4l2_overlay",
-	.fops       = &msm_v4l2_overlay_fops,
+static struct video_device msmv4l2_vid_device0 = {
+	.name		= "msmv4l2",
+	//.vfl_type		= VFL_TYPE_GRABBER, 
+	.fops       = &msmv4l2_fops,
 	.minor		= -1,
-	.release	= msm_v4l2_overlay_videodev_release,
+	.release	= msmv4l2_videodev_release,
 };
 
-static struct platform_driver msm_v4l2_overlay_platform_driver = {
-	.probe   = msm_v4l2_overlay_probe,
-	.remove  = msm_v4l2_overlay_remove,
+static struct video_device msmv4l2_vid_device1 = {
+	.name		= "msmv4l2",
+	//.vfl_type		= VFL_TYPE_GRABBER, 
+	.fops       = &msmv4l2_fops,
+	.minor		= -1,
+	.release	= msmv4l2_videodev_release,
+};
+
+static struct platform_driver msmv4l2_platform_driver = {
+	.probe   = msmv4l2_probe,
+	.remove  = msmv4l2_remove,
 	.driver  = {
-			 .name = "msm_v4l2_overlay_pd",
+			 .name = "msmv4l2_pd",
 		   },
 };
 
-static int __init msm_v4l2_overlay_init(void)
+static int __init
+msmv4l2_init (void)
 {
-	int ret;
+	int ret = 0;
 
+	DLOG("msmv4l2_init+++\n");
 
-	saved_vout0 = kzalloc(sizeof(struct msm_v4l2_overlay_device),
-		GFP_KERNEL);
+	saved_vout0 = kmalloc (sizeof (struct msmv4l2_device), GFP_KERNEL);
+	saved_vout1 = kmalloc (sizeof (struct msmv4l2_device), GFP_KERNEL);
 
-	if (!saved_vout0)
-		return -ENOMEM;
-
-	ret = platform_driver_register(&msm_v4l2_overlay_platform_driver);
-	if (ret < 0)
+	if (!saved_vout0 || !saved_vout1){
+		printk (KERN_ERR "msmv4l2: kmalloc failed\n");
 		goto end;
-
-	/*
-	 * Register the device with videodev.
-	 * Videodev will make IOCTL calls on application requests
-	 */
-	ret = video_register_device(&msm_v4l2_overlay_vid_device0,
-		VFL_TYPE_GRABBER, MSM_VIDEO);
-
-	if (ret < 0) {
-		pr_err("%s: V4L2 video overlay device registration failure(%d)\n",
-				  __func__, ret);
-		goto end_unregister;
 	}
 
-	mutex_init(&msmfb_lock);
+	memset (saved_vout0, 0, sizeof (struct msmv4l2_device));
+	memset (saved_vout1, 0, sizeof (struct msmv4l2_device));
 
+	ret = platform_driver_register(&msmv4l2_platform_driver);
+	if(ret < 0) {
+		printk (KERN_ERR "msmv4l2: platform_driver_register failed\n");
+		goto end;
+	}
+
+	//Register the device with videodev. 
+	//Videodev will make IOCTL calls on application requests
+	ret = video_register_device (&msmv4l2_vid_device0, VFL_TYPE_GRABBER, MSM_VIDEO);
+	if (ret < 0) {
+		printk (KERN_ERR "msmv4l2: could not register Video for Linux device 1\n");
+		goto end_unregister;
+	}	
+
+	ret = video_register_device (&msmv4l2_vid_device1, VFL_TYPE_GRABBER, MSM_VIDEO);
+	if (ret < 0) {
+		printk (KERN_ERR "msmv4l2: could not register Video for Linux device 2\n");
+		goto end_unregister;
+	}	
+
+	mutex_init(&msmfb_lock);
+	
 	return 0;
 
 end_unregister:
-	platform_driver_unregister(&msm_v4l2_overlay_platform_driver);
+	platform_driver_unregister(&msmv4l2_platform_driver);
 
 end:
 	kfree(saved_vout0);
+	kfree(saved_vout1);
+	saved_vout0 = NULL;
+	saved_vout1 = NULL;
 	return ret;
 }
 
-static void __exit msm_v4l2_overlay_exit(void)
+static void
+msmv4l2_exit (void)
 {
-	video_unregister_device(&msm_v4l2_overlay_vid_device0);
-	platform_driver_unregister(&msm_v4l2_overlay_platform_driver);
-	mutex_destroy(&msmfb_lock);
+
+	DLOG("mmsv4l2_exit+++\n");
+
+	video_unregister_device(&msmv4l2_vid_device0);
+	video_unregister_device(&msmv4l2_vid_device1);
+
+	platform_driver_unregister(&msmv4l2_platform_driver);
+
 	kfree(saved_vout0);
+	kfree(saved_vout1);
+	saved_vout0 = NULL;
+	saved_vout1 = NULL;
+	return;
 }
 
-module_init(msm_v4l2_overlay_init);
-module_exit(msm_v4l2_overlay_exit);
+module_init (msmv4l2_init);
+module_exit (msmv4l2_exit);
 
-MODULE_DESCRIPTION("MSM V4L2 Video Overlay Driver");
-MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR ("Palm");
+MODULE_DESCRIPTION ("MSM V4L2 Driver");
+MODULE_LICENSE ("GPL");
+

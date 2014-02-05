@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,8 +22,10 @@ int add_axi_qos(void)
 	ebi1_clk = clk_get(NULL, "ebi1_vfe_clk");
 	if (IS_ERR(ebi1_clk))
 		ebi1_clk = NULL;
-	else
+	else {
+		clk_prepare(ebi1_clk);
 		clk_enable(ebi1_clk);
+	}
 
 	return 0;
 }
@@ -42,6 +44,7 @@ void release_axi_qos(void)
 		return;
 
 	clk_disable(ebi1_clk);
+	clk_unprepare(ebi1_clk);
 	clk_put(ebi1_clk);
 	ebi1_clk = NULL;
 }

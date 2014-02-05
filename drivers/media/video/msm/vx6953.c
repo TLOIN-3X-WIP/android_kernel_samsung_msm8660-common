@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,6 +8,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
  *
  */
 
@@ -2623,7 +2628,7 @@ static int32_t vx6953_sensor_setting(int update_type, int rt)
 				vx6953_csi_params.lane_cnt = 1;
 				vx6953_csi_params.lane_assign = 0xe4;
 				vx6953_csi_params.dpcm_scheme = 0;
-				vx6953_csi_params.settle_cnt = 7;
+				vx6953_csi_params.settle_cnt = 14/*7*/;
 				rc = msm_camio_csi_config(&vx6953_csi_params);
 				if (rc < 0)
 					CDBG("config csi controller failed\n");
@@ -3077,10 +3082,10 @@ static int32_t vx6953_sensor_setting(int update_type, int rt)
 			vx6953_csi_params.lane_cnt = 1;
 			vx6953_csi_params.lane_assign = 0xe4;
 			vx6953_csi_params.dpcm_scheme = 0;
-			vx6953_csi_params.settle_cnt = 7;
+			vx6953_csi_params.settle_cnt = 14/*7*/;
 			rc = msm_camio_csi_config(&vx6953_csi_params);
 			if (rc < 0)
-				return rc;
+				CDBG(" config csi controller failed \n");
 
 			msleep(vx6953_stm5m0edof_delay_msecs_stdby);
 
@@ -3242,8 +3247,6 @@ static int32_t vx6953_power_down(void)
 
 static int vx6953_probe_init_done(const struct msm_camera_sensor_info *data)
 {
-	gpio_set_value_cansleep(data->sensor_reset, 0);
-	gpio_free(data->sensor_reset);
 	return 0;
 }
 static int vx6953_probe_init_sensor(const struct msm_camera_sensor_info *data)
@@ -3251,21 +3254,6 @@ static int vx6953_probe_init_sensor(const struct msm_camera_sensor_info *data)
 	int32_t rc = 0;
 	unsigned short chipidl, chipidh;
 	CDBG("%s: %d\n", __func__, __LINE__);
-	rc = gpio_request(data->sensor_reset, "vx6953");
-	CDBG(" vx6953_probe_init_sensor \n");
-	if (!rc) {
-		CDBG("sensor_reset = %d\n", rc);
-		CDBG(" vx6953_probe_init_sensor 1\n");
-		gpio_direction_output(data->sensor_reset, 0);
-		msleep(10);
-		CDBG(" vx6953_probe_init_sensor 1\n");
-		gpio_set_value_cansleep(data->sensor_reset, 1);
-	} else {
-		CDBG(" vx6953_probe_init_sensor 2\n");
-		goto init_probe_done;
-	}
-	msleep(20);
-	CDBG(" vx6953_probe_init_sensor is called\n");
 	/* 3. Read sensor Model ID: */
 	rc = vx6953_i2c_read(0x0000, &chipidh, 1);
 	if (rc < 0) {
@@ -3604,8 +3592,6 @@ static int vx6953_sensor_release(void)
 	int rc = -EBADF;
 	mutex_lock(&vx6953_mut);
 	vx6953_power_down();
-	gpio_direction_output(vx6953_ctrl->sensordata->sensor_reset, 0);
-	gpio_free(vx6953_ctrl->sensordata->sensor_reset);
 	kfree(vx6953_ctrl);
 	vx6953_ctrl = NULL;
 	CDBG("vx6953_release completed\n");
@@ -3630,7 +3616,7 @@ static int vx6953_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = vx6953_sensor_open_init;
 	s->s_release = vx6953_sensor_release;
 	s->s_config  = vx6953_sensor_config;
-	s->s_mount_angle  = info->sensor_platform_info->mount_angle;
+	s->s_mount_angle  = 0;
 	vx6953_probe_init_done(info);
 	return rc;
 
