@@ -2332,7 +2332,7 @@ config FB_MSM_LCDC_S6E63M0_WVGA
 
 config FB_MSM_LCDC_S6E63M0_WVGA_PANEL
 	depends on FB_MSM_LCDC_HW
-	bool "LCDC S6B63M0 WVGA Panel"
+	bool
 	select FB_MSM_LCDC_S6E63M0_WVGA
 	---help---
 	  Support for LCDC S6E63M0 WVGA (480x800) panel	  
