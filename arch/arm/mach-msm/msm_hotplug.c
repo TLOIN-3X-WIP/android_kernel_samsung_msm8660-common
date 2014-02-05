@@ -20,7 +20,7 @@
 #include <linux/timer.h>
 #include <linux/slab.h>
 #include <linux/cpufreq.h>
-#include <linux/lcd_notify.h>
+// #include <linux/lcd_notify.h>
 
 #include <mach/cpufreq.h>
 
@@ -239,12 +239,14 @@ static void msm_hotplug_fn(struct work_struct *work)
 		goto reschedule;
 	}
 
+#if 0
 	if (online_cpus < hp->cpus_boosted && hammerhead_boosted) {
 		dprintk("%s: cur_load: %3u online_cpus: %u boosted\n",
 			MSM_HOTPLUG, cur_load, online_cpus);
 		online_cpu(hp->cpus_boosted);
 		goto reschedule;
 	}
+#endif
 
 	for (i = st->min_cpus; i < NUM_LOAD_LEVELS; i++) {
 		if (cur_load <= load[i].up_threshold
@@ -318,6 +320,7 @@ static void msm_hotplug_resume(struct work_struct *work)
 }
 EXPORT_SYMBOL_GPL(msm_hotplug_resume);
 
+#if 0
 static int lcd_notifier_callback(struct notifier_block *nb,
 				 unsigned long event, void *data)
 {
@@ -336,6 +339,7 @@ static int lcd_notifier_callback(struct notifier_block *nb,
 
 	return 0;
 }
+#endif
 
 /************************** sysfs interface ************************/
 
@@ -689,9 +693,11 @@ static int __init msm_hotplug_device_init(void)
 	if (ret)
 		return pr_err("%s: Creation of sysfs: %d\n", MSM_HOTPLUG, ret);
 
+#if 0
 	hp->notif.notifier_call = lcd_notifier_callback;
 	if (lcd_register_client(&hp->notif) != 0)
 		pr_err("%s: LCD notifier callback failed\n", __func__);
+#endif
 
 	pr_info("%s: Device init\n", MSM_HOTPLUG);
 
