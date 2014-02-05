@@ -5267,18 +5267,13 @@ static struct msm_panel_common_pdata lcdc_samsung_panel_data = {
 #ifdef CONFIG_FB_MSM_LCDC_LG_XGA
 /* PMIC8058 GPIO offset starts at 0 */
 #define GPIO_BACKLIGHT_EN  PM8058_GPIO_PM_TO_SYS(25-1)
-static bool delay_bl_power_up = true;
+
+static int lcdc_common_panel_power(int on);
 
 int set_pmic_backlight(int bl_level)
 {
-	if(delay_bl_power_up)
-	{
-		delay_bl_power_up = false;
-		msleep(200);
-		gpio_set_value_cansleep(GPIO_BACKLIGHT_EN, 1);
-		pr_info("[%s] backlight enabled\n",__func__);
-	}
-	return 0;
+	gpio_set_value_cansleep(GPIO_BACKLIGHT_EN, 1);
+	return lcdc_common_panel_power(!!bl_level);
 }
 
 static struct msm_panel_common_pdata lcdc_common_panel_data = {
@@ -12604,9 +12599,10 @@ static int lcdc_common_panel_power(int on)
 
 		gpio_set_value_cansleep(GPIO_LVDS_SHDN_N, 1);
 		gpio_set_value_cansleep(GPIO_LCD_PWR_EN, 1);
+		gpio_set_value_cansleep(GPIO_BACKLIGHT_EN, 1);
 		mdelay(20);
 		// enable backlight later
-		delay_bl_power_up = true;
+		// delay_bl_power_up = true;
 	}
 	else
 	{
@@ -12852,8 +12848,11 @@ static int lcdc_panel_power(int on)
 	int flag_on = !!on;
 	static int lcdc_power_save_on = 0;
 
-	if (lcdc_power_save_on == flag_on)
+	if (lcdc_power_save_on == flag_on) {
+		printk(KERN_DEBUG "%s: on=%d is_on=%d\n", 
+				__func__, flag_on, lcdc_power_save_on);
 		return 0;
+	}
 
 	lcdc_power_save_on = flag_on;
 

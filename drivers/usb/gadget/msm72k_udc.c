@@ -674,27 +674,36 @@ static void init_endpoints(struct usb_info *ui)
 
 static void config_ept(struct msm_endpoint *ept)
 {
-	struct usb_info *ui = ept->ui;
-	unsigned cfg = CONFIG_MAX_PKT(ept->ep.maxpacket) | CONFIG_ZLT;
-	const struct usb_endpoint_descriptor *desc = ept->ep.desc;
+	struct usb_info *ept_ui;
+	unsigned cfg;
+	const struct usb_endpoint_descriptor *desc;
 	unsigned mult = 0;
 
+	ept_ui = ept->ui;
+	cfg = CONFIG_MAX_PKT(ept->ep.maxpacket) | CONFIG_ZLT;
+	desc = ept->ep.desc;
+
+	printk(KERN_DEBUG "%s: desc=%p\n", __func__, desc);
+#if 0
 	if (desc && ((desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
 			== USB_ENDPOINT_XFER_ISOC)) {
 		cfg &= ~(CONFIG_MULT);
 		mult = ((ept->ep.maxpacket >> CONFIG_MULT_SHIFT) + 1) & 0x03;
 		cfg |= (mult << (ffs(CONFIG_MULT) - 1));
 	}
+#endif
 
 	/* ep0 out needs interrupt-on-setup */
 	if (ept->bit == 0)
 		cfg |= CONFIG_IOS;
 
+	if (!ept) printk(KERN_DEBUG "%s: ept NULL\n", __func__);
+	if (!ept->head) printk(KERN_DEBUG "%s: ept->head NULL\n", __func__);
 	ept->head->config = cfg;
 	ept->head->next = TERMINATE;
 
 	if (ept->ep.maxpacket)
-		dev_dbg(&ui->pdev->dev,
+		dev_dbg(&ept_ui->pdev->dev,
 			"ept #%d %s max:%d head:%p bit:%d\n",
 		       ept->num,
 		       (ept->flags & EPT_FLAG_IN) ? "in" : "out",
@@ -705,8 +714,9 @@ static void configure_endpoints(struct usb_info *ui)
 {
 	unsigned n;
 
-	for (n = 0; n < 32; n++)
-		config_ept(ui->ept + n);
+	for (n = 0; n < 32; n++) {
+			config_ept(ui->ept + n);
+	}
 }
 
 struct usb_request *usb_ept_alloc_req(struct msm_endpoint *ept,
