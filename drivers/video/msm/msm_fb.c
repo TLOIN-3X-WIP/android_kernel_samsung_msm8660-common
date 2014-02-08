@@ -16,6 +16,7 @@
  * GNU General Public License for more details.
  */
 
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
@@ -530,6 +531,8 @@ static int msm_fb_suspend(struct platform_device *pdev, pm_message_t state)
 	struct msm_fb_data_type *mfd;
 	int ret = 0;
 
+	printk(KERN_DEBUG "%s\n", __func__);
+
 	MSM_FB_DEBUG("msm_fb_suspend\n");
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
@@ -664,6 +667,7 @@ static int msm_fb_resume(struct platform_device *pdev)
 	int ret = 0;
 	struct msm_fb_data_type *mfd;
 
+	printk(KERN_DEBUG "%s\n", __func__);
 	MSM_FB_DEBUG("msm_fb_resume\n");
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
@@ -812,6 +816,7 @@ static void msmfb_early_suspend(struct early_suspend *h)
 
 	struct msm_fb_panel_data *pdata = NULL;
 
+	printk(KERN_DEBUG "%s\n", __func__);
 	msm_fb_pan_idle(mfd);
 
 #if defined(CONFIG_FB_MSM_MDP303)
@@ -853,6 +858,8 @@ static void msmfb_early_resume(struct early_suspend *h)
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 						early_suspend);
 	struct msm_fb_panel_data *pdata = NULL;
+
+	printk(KERN_DEBUG "%s\n", __func__);
 
 	msm_fb_pan_idle(mfd);
 
