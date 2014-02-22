@@ -7553,6 +7553,9 @@ static struct platform_device *surf_devices[] __initdata = {
 #endif
 #ifdef CONFIG_MSM_CAMERA
 #ifndef CONFIG_MSM_CAMERA_V4L2
+#ifdef CONFIG_WEBCAM_MT9M113
+	&msm_camera_sensor_webcam_mt9m113,
+#endif
 #ifdef CONFIG_MT9E013
 	&msm_camera_sensor_mt9e013,
 #endif
