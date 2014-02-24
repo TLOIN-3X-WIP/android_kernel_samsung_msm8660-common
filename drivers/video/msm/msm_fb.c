@@ -858,8 +858,9 @@ static void msmfb_early_resume(struct early_suspend *h)
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 						early_suspend);
 	struct msm_fb_panel_data *pdata = NULL;
+	struct fb_event event;
 
-	printk(KERN_DEBUG "%s\n", __func__);
+	// printk(KERN_DEBUG "%s\n", __func__);
 
 	msm_fb_pan_idle(mfd);
 
@@ -875,7 +876,12 @@ static void msmfb_early_resume(struct early_suspend *h)
 	}
 
 	msm_fb_resume_sub(mfd);
+
+	event.info = mfd->fbi;
+	event.data = NULL;
+	fb_notifier_call_chain(FB_EVENT_RESUME, &event);
 }
+
 #endif
 
 static int unset_bl_level, bl_updated;
@@ -908,7 +914,7 @@ static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 static void msm_fb_scale_bl(__u32 *bl_lvl)
 {
 	__u32 temp = *bl_lvl;
-	pr_debug("%s: input = %d, scale = %d", __func__, temp, bl_scale);
+	// pr_debug("%s: input = %d, scale = %d", __func__, temp, bl_scale);
 	if (temp >= bl_min_lvl) {
 		/* bl_scale is the numerator of scaling fraction (x/1024)*/
 		temp = ((*bl_lvl) * bl_scale) / 1024;
@@ -1765,7 +1771,8 @@ static int msm_fb_open(struct fb_info *info, int user)
 	result = pm_runtime_get_sync(info->dev);
 
 	if (result < 0) {
-		printk(KERN_ERR "pm_runtime: fail to wake up\n");
+		printk(KERN_ERR "%s: pm_runtime: fail to wake up result=%d\n",
+				__func__, result);
 	}
 
 	if (info->node == 0 && !(mfd->cont_splash_done)) {	/* primary */

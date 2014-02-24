@@ -4887,7 +4887,6 @@ static int lcdc_common_panel_power(int on);
 
 int set_pmic_backlight(int bl_level)
 {
-	printk(KERN_DEBUG "%s: bl_level=%d\n", __func__, bl_level);
 	gpio_set_value_cansleep(GPIO_BACKLIGHT_EN, 1);
 	return lcdc_common_panel_power(!!bl_level);
 }
@@ -8453,7 +8452,7 @@ static struct pm8xxx_vibrator_platform_data pm8058_vib_pdata = {
 };
 
 static struct pm8xxx_rtc_platform_data pm8058_rtc_pdata = {
-	.rtc_write_enable       = false,
+	.rtc_write_enable       = true,
 	.rtc_alarm_powerup	= false,
 };
 
@@ -12116,7 +12115,7 @@ static int lcdc_common_panel_power(int on)
 	int rc;
 	static int isOn = 0;
 
-	printk(KERN_ERR "%s: on=%d isOn=%d\n", __func__, on, isOn);
+	// printk(KERN_ERR "%s: on=%d isOn=%d\n", __func__, on, isOn);
 
 	if (on == isOn) return 0;
 
@@ -12452,8 +12451,7 @@ static int lcdc_panel_power(int on)
 	int flag_on = !!on;
 	static int lcdc_power_save_on = 0;
 
-	printk(KERN_DEBUG "%s: on=%d save_on=%d\n", 
-			__func__, on, lcdc_power_save_on);
+	// printk(KERN_DEBUG "%s: on=%d save_on=%d\n", __func__, on, lcdc_power_save_on);
 
 	if (lcdc_power_save_on == flag_on) {
 		printk(KERN_DEBUG "%s: on=%d is_on=%d\n", 

@@ -16,7 +16,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG 1
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -684,8 +683,8 @@ static void config_ept(struct msm_endpoint *ept)
 	cfg = CONFIG_MAX_PKT(ept->ep.maxpacket) | CONFIG_ZLT;
 	desc = ept->ep.desc;
 
-	printk(KERN_DEBUG "%s: desc=%p\n", __func__, desc);
 #if 0
+	// -JCS
 	if (desc && ((desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
 			== USB_ENDPOINT_XFER_ISOC)) {
 		cfg &= ~(CONFIG_MULT);

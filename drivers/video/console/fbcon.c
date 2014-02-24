@@ -3267,14 +3267,14 @@ static int fbcon_event_notify(struct notifier_block *self,
 				  action == FB_EVENT_FB_UNREGISTERED))
 		goto done;
 
-	printk(KERN_DEBUG "%s: action=%lu\n", __func__, action);
-
 	switch(action) {
 	case FB_EVENT_SUSPEND:
 		fbcon_suspended(info);
 		break;
 	case FB_EVENT_RESUME:
+		console_lock();
 		fbcon_resumed(info);
+		console_unlock();
 		break;
 	case FB_EVENT_MODE_CHANGE:
 		fbcon_modechanged(info);

@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/rtc.h>
@@ -332,6 +333,10 @@ pm8xxx_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
 	u8 ctrl_reg;
 
+	printk(KERN_DEBUG "%s en=%u\n", __func__, enabled);
+	dump_stack();
+	if (!enabled) return 0;
+
 	spin_lock_irqsave(&rtc_dd->ctrl_reg_lock, irq_flags);
 	ctrl_reg = rtc_dd->ctrl_reg;
 	ctrl_reg = (enabled) ? (ctrl_reg | PM8xxx_RTC_ALARM_ENABLE) :
@@ -363,6 +368,8 @@ static irqreturn_t pm8xxx_alarm_trigger(int irq, void *dev_id)
 	u8 ctrl_reg;
 	int rc;
 	unsigned long irq_flags;
+
+	printk(KERN_DEBUG "%s\n", __func__);
 
 	rtc_update_irq(rtc_dd->rtc, 1, RTC_IRQF | RTC_AF);
 
@@ -423,6 +430,7 @@ static int __devinit pm8xxx_rtc_probe(struct platform_device *pdev)
 	spin_lock_init(&rtc_dd->ctrl_reg_lock);
 
 	rtc_dd->rtc_alarm_irq = platform_get_irq(pdev, 0);
+	printk(KERN_DEBUG "%s: alarm-irq: %d\n", __func__, rtc_dd->rtc_alarm_irq);
 	if (rtc_dd->rtc_alarm_irq < 0) {
 		dev_err(&pdev->dev, "Alarm IRQ resource absent!\n");
 		rc = -ENXIO;
@@ -525,8 +533,12 @@ static int pm8xxx_rtc_suspend(struct device *dev)
 {
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
 
-	if (device_may_wakeup(dev))
+	printk(KERN_DEBUG "%s:\n", __func__);
+
+	if (device_may_wakeup(dev)) {
+		printk(KERN_DEBUG "%s: enabling rtc_alarm_irq irq_wake\n", __func__);
 		enable_irq_wake(rtc_dd->rtc_alarm_irq);
+	}
 
 	return 0;
 }

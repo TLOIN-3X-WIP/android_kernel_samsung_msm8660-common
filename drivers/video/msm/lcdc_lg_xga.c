@@ -45,13 +45,13 @@ static struct msm_panel_common_pdata *lcdc_lg_pdata;
 
 static int lcdc_lg_panel_on(struct platform_device *pdev)
 {
-	printk(KERN_DEBUG "%s\n", __func__);
+	// printk(KERN_DEBUG "%s\n", __func__);
 	return 0;
 }
 
 static int lcdc_lg_panel_off(struct platform_device *pdev)
 {
-	printk(KERN_DEBUG "%s\n", __func__);
+	// printk(KERN_DEBUG "%s\n", __func__);
 	return 0;
 }
 

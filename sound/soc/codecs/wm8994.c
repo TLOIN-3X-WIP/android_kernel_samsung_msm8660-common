@@ -2532,8 +2532,6 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 
-	printk(KERN_ERR "%s: CALLEDIT\n", __func__);
-
 	switch (control->type) {
 	case WM8994:
 		snd_soc_update_bits(codec, WM8994_MICBIAS, WM8994_MICD_ENA, 0);
@@ -2565,8 +2563,6 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 	unsigned int val, mask;
-
-	printk(KERN_ERR "%s: CALLEDIT\n", __func__);
 
 	pm_runtime_get_sync(codec->dev);
 

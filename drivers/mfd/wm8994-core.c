@@ -291,8 +291,6 @@ static int wm8994_suspend(struct device *dev)
 	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	int ret;
 
-	printk(KERN_ERR "%s: CALLED\n", __func__);
-	
 	/* Don't actually go through with the suspend if the CODEC is
 	 * still active (eg, for audio passthrough from CP. */
 	ret = wm8994_reg_read(wm8994, WM8994_POWER_MANAGEMENT_1);
@@ -345,8 +343,6 @@ static int wm8994_resume(struct device *dev)
 	struct wm8994 *wm8994 = dev_get_drvdata(dev);
 	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	int ret;
-
-	printk(KERN_ERR "%s: CALLED\n", __func__);
 
 	/* We may have lied to the PM core about suspending */
 	if (!wm8994->suspended)
