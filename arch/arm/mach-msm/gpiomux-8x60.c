@@ -496,14 +496,14 @@ static struct gpiomux_setting cam_active_5_cfg = {
 };
 
 #ifdef CONFIG_MACH_TENDERLOIN
-static struct gpiomux_setting cam_gpio_outh_8m_pn = {
+static struct gpiomux_setting cam_func_outh_8m_pn = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 	.dir = GPIOMUX_OUT_HIGH,
 };
 
-static struct gpiomux_setting cam_gpio_outl_8m_pn = {
+static struct gpiomux_setting cam_func_outl_8m_pn = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
@@ -526,6 +526,20 @@ static struct gpiomux_setting gpio_in_2m_pn = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting cam_gpio_outh_8m_pn = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting cam_gpio_outh_2m_pn = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
 };
 #endif
 
@@ -2172,21 +2186,21 @@ static struct msm_gpiomux_config msm8x60_cam_configs[] __initdata = {
 	{
 		.gpio = TENDERLOIN_CAM_I2C_DATA,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_gpio_outh_8m_pn,
+			[GPIOMUX_ACTIVE]    = &cam_func_outh_8m_pn,
 			[GPIOMUX_SUSPENDED] = &gpio_in_2m_pu,
 		},
 	},
 	{
 		.gpio = TENDERLOIN_CAM_I2C_CLK,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_gpio_outh_8m_pn,
+			[GPIOMUX_ACTIVE]    = &cam_func_outh_8m_pn,
 			[GPIOMUX_SUSPENDED] = &gpio_in_2m_pu,
 		},
 	},
 	{
 		.gpio = TENDERLOIN_CAMIF_MCLK,
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_gpio_outl_8m_pn,
+			[GPIOMUX_ACTIVE]    = &cam_func_outl_8m_pn,
 			[GPIOMUX_SUSPENDED] = &gpio_in_2m_pd,
 		},
 	},
@@ -2194,14 +2208,14 @@ static struct msm_gpiomux_config msm8x60_cam_configs[] __initdata = {
 		.gpio = TENDERLOIN_WEBCAM_RST,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &cam_gpio_outh_8m_pn,
-			[GPIOMUX_SUSPENDED] = &gpio_in_2m_pn,
+			[GPIOMUX_SUSPENDED] = &cam_gpio_outh_2m_pn,
 		},
 	},
 	{
 		.gpio = TENDERLOIN_WEBCAM_PWDN,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &cam_gpio_outh_8m_pn,
-			[GPIOMUX_SUSPENDED] = &gpio_in_2m_pn,
+			[GPIOMUX_SUSPENDED] = &cam_gpio_outh_2m_pn,
 		},
 	}
 #else
@@ -2440,6 +2454,7 @@ tenderloin_gpiomux_cfgs[] __initdata = {
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},
 	{msm8x60_aux_pcm_configs, ARRAY_SIZE(msm8x60_aux_pcm_configs)},
 	{msm8x60_mdp_vsync_configs, ARRAY_SIZE(msm8x60_mdp_vsync_configs)},
+	{msm8x60_cam_configs, ARRAY_SIZE(msm8x60_cam_configs)},
 #if 0
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	{tenderloin_ebi2_configs, ARRAY_SIZE(tenderloin_ebi2_configs)},

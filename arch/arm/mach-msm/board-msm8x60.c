@@ -9958,7 +9958,7 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 #ifdef CONFIG_MSM_CAMERA
 #ifndef CONFIG_MSM_CAMERA_V4L2
 	{
-		I2C_SURF | I2C_FFA | I2C_FLUID ,
+		I2C_SURF | I2C_FFA | I2C_FLUID | I2C_TENDERLOIN,
 		MSM_GSBI4_QUP_I2C_BUS_ID,
 		msm_camera_boardinfo,
 		ARRAY_SIZE(msm_camera_boardinfo),

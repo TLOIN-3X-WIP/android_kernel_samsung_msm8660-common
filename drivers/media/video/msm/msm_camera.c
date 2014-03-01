@@ -46,7 +46,6 @@ spinlock_t pp_prev_spinlock;
 spinlock_t pp_snap_spinlock;
 spinlock_t pp_thumb_spinlock;
 
-#undef CONFIG_MSM_MULTIMEDIA_USE_ION
 
 #define ERR_USER_COPY(to) pr_err("%s(%d): copy %s user\n", \
 				__func__, __LINE__, ((to) ? "to" : "from"))
@@ -338,7 +337,7 @@ static int msm_pmem_table_add(struct hlist_head *ptype,
 	if (!region)
 		goto out;
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-	region->handle = ion_import_dma_buf(client_for_ion, info->fd);
+	region->handle = ion_import_fd(client_for_ion, info->fd);
 	if (IS_ERR_OR_NULL(region->handle))
 		goto out1;
 	ion_phys(client_for_ion, region->handle,
