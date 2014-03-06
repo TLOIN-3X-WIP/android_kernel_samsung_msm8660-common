@@ -1476,6 +1476,37 @@ fail:
 EXPORT_SYMBOL_GPL(gpio_direction_output);
 
 /**
+ * gpio_can_debounce - checks if gpio can debounce
+ * @gpio: the gpio to check
+ */
+bool gpio_can_debounce(unsigned gpio)
+{
+	unsigned long		flags;
+	struct gpio_chip	*chip;
+	struct gpio_desc	*desc = &gpio_desc[gpio];
+
+	spin_lock_irqsave(&gpio_lock, flags);
+
+	if (!gpio_is_valid(gpio))
+		goto fail;
+	chip = desc->chip;
+	if (!chip || !chip->set || !chip->set_debounce)
+		goto fail;
+	gpio -= chip->base;
+	if (gpio >= chip->ngpio)
+		goto fail;
+
+	spin_unlock_irqrestore(&gpio_lock, flags);
+
+	return true;
+
+fail:
+	spin_unlock_irqrestore(&gpio_lock, flags);
+	return false;
+}
+EXPORT_SYMBOL_GPL(gpio_can_debounce);
+
+/**
  * gpio_set_debounce - sets @debounce time for a @gpio
  * @gpio: the gpio to set debounce time
  * @debounce: debounce time is microseconds
