@@ -5799,6 +5799,7 @@ static struct gpio_keys_button topaz_wifi_gpio_keys_buttons[] = {
 		.desc           = "VolUp",
 		.active_low     = 1,
 		.type		= EV_KEY,
+		.debounce_interval = 50,
 		.wakeup		= 0
 	},
 	{
@@ -5807,6 +5808,7 @@ static struct gpio_keys_button topaz_wifi_gpio_keys_buttons[] = {
 		.desc           = "VolDn",
 		.active_low     = 1,
 		.type		= EV_KEY,
+		.debounce_interval = 50,
 		.wakeup		= 0
 	},
 	{
@@ -5815,6 +5817,7 @@ static struct gpio_keys_button topaz_wifi_gpio_keys_buttons[] = {
 		.desc           = "Home",
 		.active_low     = 1,
 		.type		= EV_KEY,
+		.debounce_interval = 50,
 		.wakeup		= 1
 	},
 };
@@ -5827,6 +5830,7 @@ static struct gpio_keys_button topaz_3g_gpio_keys_buttons[] = {
 		.desc           = "VolUp",
 		.active_low     = 1,
 		.type		= EV_KEY,
+		.debounce_interval = 50,
 		.wakeup		= 0
 	},
 	{
@@ -5835,6 +5839,7 @@ static struct gpio_keys_button topaz_3g_gpio_keys_buttons[] = {
 		.desc           = "VolDn",
 		.active_low     = 1,
 		.type		= EV_KEY,
+		.debounce_interval = 50,
 		.wakeup		= 0
 	},
 	{
@@ -5843,7 +5848,8 @@ static struct gpio_keys_button topaz_3g_gpio_keys_buttons[] = {
 		.desc           = "Home",
 		.active_low     = 1,
 		.type		= EV_KEY,
-		.wakeup		= 0
+		.debounce_interval = 50,
+		.wakeup		= 1
 	},
 };
 

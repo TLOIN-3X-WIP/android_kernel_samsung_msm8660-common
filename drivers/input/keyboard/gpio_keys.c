@@ -392,11 +392,15 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 	}
 
 	if (button->debounce_interval) {
-		error = gpio_set_debounce(button->gpio,
-					  button->debounce_interval * 1000);
-		/* use timer if gpiolib doesn't provide debounce */
-		if (error < 0)
+		if (gpio_can_debounce(button->gpio)) {
+			error = gpio_set_debounce(button->gpio,
+						  button->debounce_interval * 1000);
+			/* use timer if gpiolib set_debounce fails */
+			if (error < 0)
+				bdata->timer_debounce = button->debounce_interval;
+		} else {
 			bdata->timer_debounce = button->debounce_interval;
+		}
 	}
 
 	irq = gpio_to_irq(button->gpio);
