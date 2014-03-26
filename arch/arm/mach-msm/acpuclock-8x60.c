@@ -10,8 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#define CONFIG_MSM_FORCE_MAX_CPU_TABLE 1
-
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
@@ -48,18 +46,19 @@
  * The PLL hardware is capable of 384MHz to 1536MHz. The L_VALs
  * used for calibration should respect these limits. */
 #define L_VAL_SCPLL_CAL_MIN	0x08 /* =  432 MHz with 27MHz source */
-#if !defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE) || 1
+#if !defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE)
 #define L_VAL_SCPLL_CAL_MAX	0x1C /* = 1512 MHz with 27MHz source */
 #else
 #define L_VAL_SCPLL_CAL_MAX	0x21
 #endif
 
-#if !defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE) || 1
+#if !defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE)
 #define MAX_VDD_SC		1250000 /* uV */
+#define MAX_VDD_MEM		1250000 /* uV */
 #else
 #define MAX_VDD_SC		1350000 /* uV */
+#define MAX_VDD_MEM		1350000 /* uV */
 #endif
-#define MAX_VDD_MEM		1250000 /* uV */
 #define MAX_VDD_DIG		1200000 /* uV */
 #define MAX_AXI			 310500 /* KHz */
 #define SCPLL_LOW_VDD_FMAX	 594000 /* KHz */
@@ -203,13 +202,16 @@ static struct clkctl_l2_speed l2_freq_tbl_v2[] = {
 	[17] = {1296000,  1, 0x18, 1200000, 1225000, 3},
 	[18] = {1350000,  1, 0x19, 1200000, 1225000, 3},
 	[19] = {1404000,  1, 0x1A, 1200000, 1250000, 3},
-#if defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE) && 0
+#if defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE)
 	[20] = {1458000,  1, 0x1B, 1200000, 1250000, 3},
 	[21] = {1512000,  1, 0x1C, 1200000, 1275000, 3},
 #endif
 };
 
 #define L2(x) (&l2_freq_tbl_v2[(x)])
+
+
+
 /* SCPLL frequencies = 2 * 27 MHz * L_VAL */
 static struct clkctl_acpu_speed acpu_freq_tbl_1188mhz[] = {
   { {1, 1},  192000,  ACPU_PLL_8, 3, 1, 0, 0,    L2(1),   812500, 0x03006000},
@@ -324,7 +326,8 @@ static struct clkctl_acpu_speed acpu_freq_tbl_fast[] = {
   { {0, 0}, 0 },
 };
 
-#if defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE) && 0
+#if defined(CONFIG_MSM_FORCE_MAX_CPU_TABLE)
+/* SCPLL frequencies = 2 * 27 MHz * L_VAL */
 static struct clkctl_acpu_speed acpu_freq_tbl_max[] = {
   { {1, 1},  192000,  ACPU_PLL_8, 3, 1, 0, 0,    L2(1),   812500, 0x03006000},
   /* MAX_AXI row is used to source CPU cores and L2 from the AFAB clock. */
@@ -339,18 +342,23 @@ static struct clkctl_acpu_speed acpu_freq_tbl_max[] = {
   { {1, 1},  756000,  ACPU_SCPLL, 0, 0, 1, 0x0E, L2(7),  1000000, 0x03006000},
   { {1, 1},  810000,  ACPU_SCPLL, 0, 0, 1, 0x0F, L2(8),  1012500, 0x03006000},
   { {1, 1},  864000,  ACPU_SCPLL, 0, 0, 1, 0x10, L2(9),  1037500, 0x03006000},
-  { {1, 1},  918000,  ACPU_SCPLL, 0, 0, 1, 0x11, L2(10), 1062500, 0x03006000},
-  { {1, 1},  972000,  ACPU_SCPLL, 0, 0, 1, 0x12, L2(11), 1087500, 0x03006000},
-  { {1, 1}, 1026000,  ACPU_SCPLL, 0, 0, 1, 0x13, L2(12), 1125000, 0x03006000},
-  { {1, 1}, 1080000,  ACPU_SCPLL, 0, 0, 1, 0x14, L2(13), 1137500, 0x03006000},
-  { {1, 1}, 1134000,  ACPU_SCPLL, 0, 0, 1, 0x15, L2(14), 1162500, 0x03006000},
-  { {1, 1}, 1188000,  ACPU_SCPLL, 0, 0, 1, 0x16, L2(15), 1187500, 0x03006000},
-  { {1, 1}, 1242000,  ACPU_SCPLL, 0, 0, 1, 0x17, L2(16), 1200000, 0x03006000},
-  { {1, 1}, 1404000,  ACPU_SCPLL, 0, 0, 1, 0x1A, L2(19), 1225000, 0x03006000},
-  { {1, 1}, 1512000,  ACPU_SCPLL, 0, 0, 1, 0x1C, L2(19), 1250000, 0x03006000},
-  { {1, 1}, 1620000,  ACPU_SCPLL, 0, 0, 1, 0x1E, L2(20), 1275000, 0x03006000},
-  { {1, 1}, 1728000,  ACPU_SCPLL, 0, 0, 1, 0x20, L2(20), 1300000, 0x03006000},
-  { {1, 1}, 1782000,  ACPU_SCPLL, 0, 0, 1, 0x21, L2(20), 1350000, 0x03006000},
+  { {1, 1},  918000,  ACPU_SCPLL, 0, 0, 1, 0x11, L2(10), 1037500, 0x03006000},
+  { {1, 1},  972000,  ACPU_SCPLL, 0, 0, 1, 0x12, L2(11), 1037500, 0x03006000},
+  { {1, 1}, 1026000,  ACPU_SCPLL, 0, 0, 1, 0x13, L2(12), 1050000, 0x03006000},
+  { {1, 1}, 1080000,  ACPU_SCPLL, 0, 0, 1, 0x14, L2(13), 1062500, 0x03006000},
+  { {1, 1}, 1134000,  ACPU_SCPLL, 0, 0, 1, 0x15, L2(14), 1075000, 0x03006000},
+  { {1, 1}, 1188000,  ACPU_SCPLL, 0, 0, 1, 0x16, L2(15), 1087500, 0x03006000},
+  { {1, 1}, 1242000,  ACPU_SCPLL, 0, 0, 1, 0x17, L2(16), 1100000, 0x03006000},
+  { {1, 1}, 1296000,  ACPU_SCPLL, 0, 0, 1, 0x18, L2(17), 1125000, 0x03006000},
+  { {1, 1}, 1350000,  ACPU_SCPLL, 0, 0, 1, 0x19, L2(18), 1150000, 0x03006000},
+  { {1, 1}, 1404000,  ACPU_SCPLL, 0, 0, 1, 0x1A, L2(19), 1175000, 0x03006000},
+  { {1, 1}, 1458000,  ACPU_SCPLL, 0, 0, 1, 0x1B, L2(19), 1187500, 0x03006000},
+  { {1, 1}, 1512000,  ACPU_SCPLL, 0, 0, 1, 0x1C, L2(19), 1200000, 0x03006000},
+  { {1, 1}, 1566000,  ACPU_SCPLL, 0, 0, 1, 0x1D, L2(20), 1225000, 0x03006000},
+  { {1, 1}, 1620000,  ACPU_SCPLL, 0, 0, 1, 0x1E, L2(20), 1250000, 0x03006000},
+  { {1, 1}, 1674000,  ACPU_SCPLL, 0, 0, 1, 0x1F, L2(20), 1275000, 0x03006000},
+  { {1, 1}, 1728000,  ACPU_SCPLL, 0, 0, 1, 0x20, L2(21), 1300000, 0x03006000},
+  { {1, 1}, 1782000,  ACPU_SCPLL, 0, 0, 1, 0x21, L2(21), 1325000, 0x03006000},
   { {0, 0}, 0 },
 };
 #endif
@@ -912,7 +920,7 @@ static struct notifier_block __cpuinitdata acpuclock_cpu_notifier = {
 
 static unsigned int __init select_freq_plan(void)
 {
-	uint32_t max_khz;
+	uint32_t max_khz, initial_khz;
 	struct clkctl_acpu_speed *f;
 
 #ifndef CONFIG_MSM_FORCE_MAX_CPU_TABLE
@@ -954,10 +962,10 @@ static unsigned int __init select_freq_plan(void)
 		acpu_freq_tbl = acpu_freq_tbl_1188mhz;
 	}
 #else
-	// max_khz = 1782000;
-	// acpu_freq_tbl = acpu_freq_tbl_max;
-	max_khz = 1512000;
-	acpu_freq_tbl = acpu_freq_tbl_fast;
+	max_khz = 1782000;
+	acpu_freq_tbl = acpu_freq_tbl_max;
+	initial_khz = 1512000;
+	// acpu_freq_tbl = acpu_freq_tbl_fast;
 #endif
 
 	/* Truncate the table based to max_khz. */
@@ -969,6 +977,14 @@ static unsigned int __init select_freq_plan(void)
 	}
 	f--;
 	pr_info("Max ACPU freq: %u KHz\n", f->acpuclk_khz);
+	/* set initial khz */
+	for (f = acpu_freq_tbl; f->acpuclk_khz != 0; f++) {
+		if (f->acpuclk_khz > initial_khz) {
+			break;
+		}
+	}
+	f--;
+	pr_info("Initial ACPU freq: %u KHz\n", f->acpuclk_khz);
 
 	return f->acpuclk_khz;
 }
