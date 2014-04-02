@@ -2488,3 +2488,8 @@ config COMPACTION_RETRY
 	  we give one more try to allocate pages with forced compaction.
 	  This might avoid oom-killer invocation.
 	  with many free pages being already there.
+
+config RESTART_USES_PALM_BOOTLOADER
+    bool "Enable Restart (Reboot/Shutdown) using HPalm bootloader"
+	depends on MACH_TENDERLOIN
+    default n

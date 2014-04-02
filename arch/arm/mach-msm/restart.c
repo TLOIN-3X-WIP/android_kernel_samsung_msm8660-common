@@ -146,6 +146,8 @@ static int dload_set(const char *val, struct kernel_param *kp)
 #define set_dload_mode(x) do {} while (0)
 #endif
 
+void arch_reset(char mode, const char *cmd);
+
 void msm_set_restart_mode(int mode)
 {
 	restart_mode = mode;
@@ -154,6 +156,7 @@ EXPORT_SYMBOL(msm_set_restart_mode);
 
 static void __msm_power_off(int lower_pshold)
 {
+#ifndef CONFIG_RESTART_USES_PALM_BOOTLOADER
 	local_irq_disable();
 	printk(KERN_CRIT "Powering off the SoC\n");
 #ifdef CONFIG_MSM_DLOAD_MODE
@@ -168,6 +171,10 @@ static void __msm_power_off(int lower_pshold)
 		printk(KERN_ERR "Powering off has failed\n");
 	}
 	local_irq_enable();
+#else
+	printk(KERN_INFO "%s: Initiating poweroff via bootloader\n", __func__);
+	arch_reset(0, "shutdown");
+#endif
 	return;
 }
 
@@ -253,7 +260,7 @@ void arch_reset(char mode, const char *cmd)
 
 	pm8xxx_reset_pwr_off(1);
 
-	if (cmd != NULL) {
+	if (cmd != NULL && *cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			__raw_writel(RESTART_FASTBOOT_MODE, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {
@@ -296,7 +303,17 @@ void arch_reset(char mode, const char *cmd)
 			__raw_writel(RESTART_OTHERBOOT_MODE, restart_reason);
 		}
 	}
-#ifndef CONFIG_MACH_TENDERLOIN
+#ifdef CONFIG_MACH_TENDERLOIN
+#ifdef CONFIG_RESTART_USES_PALM_BOOTLOADER
+	else {
+		if (RESTART_DLOAD != restart_mode) {
+			printk(KERN_INFO "%s: Initiating reboot via bootloader\n", __func__);
+			writel(RESTART_REASON_REBOOT, restart_reason);
+			dmb();
+		}
+	}
+#endif
+#else
 	else {
 		writel(0x12345678, restart_reason);    /* clear abnormal reset flag */
 	}
