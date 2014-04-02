@@ -2458,13 +2458,15 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 		votg_5v_switch = regulator_get(NULL, "8901_usb_otg");
 		if (IS_ERR(votg_5v_switch)) {
 			pr_err("%s: unable to get votg_5v_switch\n", __func__);
+			votg_5v_switch = NULL;
 			return;
 		}
 	}
 	if (!ext_5v_reg) {
-		ext_5v_reg = regulator_get(NULL, "8901_mpp0");
+		ext_5v_reg = regulator_get(NULL, "ext_5v");
 		if (IS_ERR(ext_5v_reg)) {
 			pr_err("%s: unable to get ext_5v_reg\n", __func__);
+			ext_5v_reg = NULL;
 			return;
 		}
 	}
@@ -7419,7 +7421,8 @@ static void __init pm8901_vreg_mpp0_init(void)
 	 * implies that the regulator connected to MPP0 is enabled when
 	 * MPP0 is low.
 	 */
-	if (machine_is_msm8x60_surf() || machine_is_msm8x60_fusion()) {
+	if (machine_is_msm8x60_surf() || machine_is_msm8x60_fusion()
+			|| machine_is_tenderloin()) {
 		msm_gpio_regulator_pdata[GPIO_VREG_ID_EXT_5V].active_low = 1;
 		pm8901_vreg_mpp0.config.control = PM8XXX_MPP_DOUT_CTRL_HIGH;
 	} else {
