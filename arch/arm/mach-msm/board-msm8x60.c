@@ -12292,7 +12292,7 @@ static int lcdc_common_panel_power(int on)
 
 		gpio_set_value_cansleep(GPIO_LVDS_SHDN_N, 1);
 		gpio_set_value_cansleep(GPIO_LCD_PWR_EN, 1);
-		mdelay(2);
+		mdelay(20);
 		// enable backlight later
 		delay_bl_power_up = true;
 	}
