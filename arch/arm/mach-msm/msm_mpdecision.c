@@ -191,8 +191,7 @@ static void mpdec_cpu_up(int cpu) {
         per_cpu(msm_mpdec_cpudata, cpu).on_time = ktime_to_ms(ktime_get());
         per_cpu(msm_mpdec_cpudata, cpu).online = true;
         per_cpu(msm_mpdec_cpudata, cpu).times_cpu_hotplugged += 1;
-        pr_info(MPDEC_TAG"CPU[%d] off->on | Mask=[%d%d%d%d]\n",
-                cpu, cpu_online(0), cpu_online(1), cpu_online(2), cpu_online(3));
+        pr_info(MPDEC_TAG"CPU[%d] off->on\n", cpu);
         mutex_unlock(&per_cpu(msm_mpdec_cpudata, cpu).hotplug_mutex);
     }
 }
@@ -207,8 +206,8 @@ static void mpdec_cpu_down(int cpu) {
         per_cpu(msm_mpdec_cpudata, cpu).online = false;
         per_cpu(msm_mpdec_cpudata, cpu).on_time_total += on_time;
         per_cpu(msm_mpdec_cpudata, cpu).times_cpu_unplugged += 1;
-        pr_info(MPDEC_TAG"CPU[%d] on->off | Mask=[%d%d%d%d] | time online: %llu\n",
-                cpu, cpu_online(0), cpu_online(1), cpu_online(2), cpu_online(3), on_time);
+        pr_info(MPDEC_TAG"CPU[%d] on->off | time online: %llu\n",
+                cpu, on_time);
         mutex_unlock(&per_cpu(msm_mpdec_cpudata, cpu).hotplug_mutex);
     }
 }
@@ -553,6 +552,11 @@ static void msm_mpdec_early_suspend(struct early_suspend *h) {
     is_screen_on = false;
 #endif
 
+	if (state == MSM_MPDEC_DISABLED) {
+        mpdec_cpu_down(1);
+		return;
+	}
+
     if (!msm_mpdec_tuners_ins.scroff_single_core) {
         pr_info(MPDEC_TAG"Screen -> off\n");
         return;
@@ -571,7 +575,7 @@ static void msm_mpdec_early_suspend(struct early_suspend *h) {
         per_cpu(msm_mpdec_cpudata, cpu).device_suspended = true;
     }
 
-    pr_info(MPDEC_TAG"Screen -> off. Deactivated mpdecision.\n");
+    pr_info(MPDEC_TAG"Screen -> off\n");
 }
 
 static void msm_mpdec_late_resume(struct early_suspend *h) {
@@ -579,6 +583,11 @@ static void msm_mpdec_late_resume(struct early_suspend *h) {
 #ifdef CONFIG_MSM_MPDEC_INPUTBOOST_CPUMIN
     is_screen_on = true;
 #endif
+
+	if (state == MSM_MPDEC_DISABLED) {
+        mpdec_cpu_up(1);
+		return;
+	}
 
     for_each_possible_cpu(cpu)
         per_cpu(msm_mpdec_cpudata, cpu).device_suspended = false;
