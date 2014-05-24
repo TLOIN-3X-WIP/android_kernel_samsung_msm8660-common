@@ -269,8 +269,6 @@ static struct {
 	{TOPAZ3G_DVT,      "topaz-6thbuild-3G"},
 	{TOPAZ3G_PVT,      "topaz-7thbuild-3G"},
 	{TOPAZ3G_PVT,      "topaz-pvt-3G"},
-
-
 };
 
 static struct {
@@ -5908,7 +5906,6 @@ static struct gpio_keys_button topaz_wifi_gpio_keys_buttons[] = {
 	},
 };
 
-#if 0 /* TODO - enable later */
 static struct gpio_keys_button topaz_3g_gpio_keys_buttons[] = {
 	{
 		.code           = KEY_VOLUMEUP,
@@ -5943,7 +5940,6 @@ static struct gpio_keys_platform_data topaz_3g_gpio_keys_data = {
 	.nbuttons       = ARRAY_SIZE(topaz_3g_gpio_keys_buttons),
 	.rep		= 0,
 };
-#endif
 
 static struct gpio_keys_platform_data topaz_wifi_gpio_keys_data = {
 	.buttons        = topaz_wifi_gpio_keys_buttons,
@@ -10083,23 +10079,22 @@ static void fixup_i2c_configs(void)
 		sx150x_data[SX150X_CORE_FLUID].irq_summary =
 			PM8058_GPIO_IRQ(PM8058_IRQ_BASE, UI_INT1_N);
 #endif
-	/*
-	 * Set PMIC 8901 MPP0 active_high to 0 for surf and charm_surf. This
-	 * implies that the regulator connected to MPP0 is enabled when
-	 * MPP0 is low.
-	 */
-#if 0 // TODO -- add/move elsewhere?
-	if (machine_is_msm8x60_surf() || machine_is_msm8x60_fusion() ||
-	    machine_is_tenderloin())
-		pm8901_vreg_init_pdata[PM8901_VREG_ID_MPP0].active_high = 0;
-	else
-		pm8901_vreg_init_pdata[PM8901_VREG_ID_MPP0].active_high = 1;
-#ifdef CONFIG_INPUT_LSM303DLH
+
 	if (board_is_topaz_3g()) {
+#ifdef CONFIG_INPUT_LSM303DLH
 		lsm303dlh_acc_pdata.negate_y = 1;
-	}
+		lsm303dlh_acc_pdata.negate_z = 1;
+		lsm303dlh_mag_pdata.negate_y = 1;
+		lsm303dlh_mag_pdata.negate_z = 1;
 #endif /* CONFIG_INPUT_LSM303DLH */
-#endif
+
+		mpu3050_data.orientation[0] = -mpu3050_data.orientation[0];
+		mpu3050_data.orientation[8] = -mpu3050_data.orientation[8];
+		mpu3050_data.accel.orientation[1] = -mpu3050_data.accel.orientation[1];
+		mpu3050_data.accel.orientation[8] = -mpu3050_data.accel.orientation[8];
+		mpu3050_data.compass.orientation[0] = -mpu3050_data.compass.orientation[0];
+		mpu3050_data.compass.orientation[8] = -mpu3050_data.compass.orientation[8];
+	}
 #endif
 }
 
@@ -13723,8 +13718,95 @@ uint32_t fixup_clk_ids[] = {
 uint32_t fixup_clk_num = ARRAY_SIZE(fixup_clk_ids);
 #endif
 
+static void topaz_detect_board_type(void)
+{
+	int emu, device0, device1, device2, d0, d1, d2, sku;
+	unsigned product, hwbuild;
+	int i;
+
+	uint32_t topaz_platform_detect[] = {
+		GPIO_CFG(79, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(95, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(96, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(97, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(98, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(99, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(100, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+		GPIO_CFG(101, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	};
+
+	config_gpio_tlmm_table(topaz_platform_detect,
+			ARRAY_SIZE(topaz_platform_detect));
+
+	emu = gpio_get_value(95);
+	device0 = gpio_get_value(96);
+	device1 = gpio_get_value(101);
+	device2 = gpio_get_value(79);
+	d0 = gpio_get_value(97);
+	d1 = gpio_get_value(98);
+	d2 = gpio_get_value(99);
+	sku = gpio_get_value(100);
+
+	product = (device2 << 2) | (device1 << 1) | (device0 << 0);
+	hwbuild = (d2 << 2) | (d1 << 1) | (d0 << 0);
+
+	printk(KERN_INFO "%s: emu=%d product=%d hwbuild=%d sku=%d\n",
+			__func__, emu, product, hwbuild, sku);
+
+	// product==0 => stingray
+	// product==1 => topaz
+	// product==2 => opal
+	// emu==0     => product
+	// emu==1     => emulator
+	// sku==0     => wifi-only
+	// sku==1     => 3G
+	//   note: buildtype code/strings do not all match below
+	//   note: and are different for different products
+	//   note: see below to topaz-Wifi adjustment
+	// hwbuild==0 => PVT
+	// hwbuild==1 => 7th-build
+	// hwbuild==2 => 6th-build
+	// hwbuild==3 => 5th-build
+	// hwbuild==4 => 4th-build
+	// hwbuild==5 => 3rd-build
+	// hwbuild==6 => 2nd-build
+	// hwbuild==7 => 1st-build
+
+	//
+	// TODO: NOTE: just handling tenderloin/topaz for now (no opal)
+	//
+	if (product != 1 || emu == 1) {
+		printk(KERN_ERR "%s: UNSUPPORTED BOARD!!!\n", __func__);
+		return;
+	}
+
+	board_is_topaz_wifi_flag = false;
+	board_is_topaz_3g_flag = false;
+	board_is_opal_3g_flag = false;
+	board_is_opal_wifi_flag = false;
+
+	if (sku == 0) {
+		board_is_topaz_wifi_flag = true;
+		if (hwbuild == 0) hwbuild = 1; // just in case
+		board_type = TOPAZ_PVT - hwbuild + 1;
+	} else {
+		board_is_topaz_3g_flag = true;
+		board_type = TOPAZ3G_PVT - hwbuild;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(topaz_boardtype_tbl); i++) {
+		if (topaz_boardtype_tbl[i].type==board_type) {
+			printk(KERN_INFO "%s: detected %s\n", 
+					__func__, topaz_boardtype_tbl[i].str);
+			break;
+		}
+	}
+}
+
 static void __init tenderloin_setup_pin_table(void)
 {
+	topaz_detect_board_type();
+
 	if (board_is_topaz_3g()) {
 		printk("%s: using tenderloin_pins_3g\n", __func__);
 		if (board_type >= TOPAZ3G_DVT) {
@@ -13748,21 +13830,18 @@ static void __init tenderloin_setup_pin_table(void)
 
 #ifdef CONFIG_KEYBOARD_GPIO
 	if (machine_is_tenderloin()) {
-		msm_gpio_keys.dev.platform_data = &topaz_wifi_gpio_keys_data;
-	}
-#if 0 /* TODO */
-	else if (board_is_opal_wifi()||board_is_opal_3g()||board_is_topaz_3g()) {
-		msm_gpio_keys.dev.platform_data = &topaz_3g_gpio_keys_data;
+		// msm_gpio_keys.dev.platform_data = &topaz_wifi_gpio_keys_data;
+		if (board_is_opal_wifi()||board_is_opal_3g()||board_is_topaz_3g()) {
+			msm_gpio_keys.dev.platform_data = &topaz_3g_gpio_keys_data;
+		} else {
+			msm_gpio_keys.dev.platform_data = &topaz_wifi_gpio_keys_data;
+		}
 	}
 #endif
-	else
-		msm_gpio_keys.dev.platform_data = &topaz_wifi_gpio_keys_data;
-#endif
 
+// from platform_fixup_pin_numbers()
 
-#if 0 // TODO
 	// touchpanel
-	xMT1386_board_info[0].irq =  MSM_GPIO_TO_INT(pin_table[MXT1386_TS_PEN_IRQ]);
 	ctp_pins[0].gpio = pin_table[GPIO_CTP_WAKE_PIN];
 
 	// BT
@@ -13779,6 +13858,7 @@ static void __init tenderloin_setup_pin_table(void)
 	max8903b_charger_pdata.DOK_N_out = pin_table[MAX8903B_GPIO_DC_OK_PIN];
 #endif
 
+#if 0 // not needed now... (but hold for a while disabled)
 	// GPIO keys
 	board_gpio_keys_buttons[0].gpio = pin_table[VOL_UP_GPIO_PIN];
 	board_gpio_keys_buttons[1].gpio = pin_table[VOL_DN_GPIO_PIN];
@@ -13978,41 +14058,52 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		msm8x60_init_gpiomux(board_data->gpiomux_cfgs);
 	}
 	else {
-#if 0 // TODO
+#if 1 // TODO
 		if (board_is_topaz_3g()) {
+#if 0
 			/* 3G EVT4 boards use the same gpiomux cfg as DVT */
 			if (board_type >= TOPAZ3G_EVT4) {
 				msm8x60_init_gpiomux(tenderloin_3g_dvt_gpiomux_cfgs);
 			} else {
 				msm8x60_init_gpiomux(tenderloin_3g_gpiomux_cfgs);
 			}
+#else
+			msm8x60_init_gpiomux(tenderloin_3g_gpiomux_cfgs);
+#endif
 			mpu3050_i2c_board_info[0].irq = MSM_GPIO_TO_INT(TENDERLOIN_GYRO_INT_3G);
 
 		} else if (board_is_topaz_wifi()) {
+#if 0
 			if (board_type >= TOPAZ_DVT) {
 				msm8x60_init_gpiomux(tenderloin_dvt_gpiomux_cfgs);
 			} else {
 				msm8x60_init_gpiomux(tenderloin_gpiomux_cfgs);
 			}
+#else
+			msm8x60_init_gpiomux(tenderloin_gpiomux_cfgs);
+#endif
 		}
 #else
 		msm8x60_init_gpiomux(tenderloin_gpiomux_cfgs);
 #endif
 	}
 
-#ifdef CONFIG_CHARGER_MAX8903
+#if 0
+	// seems to only be for prototype HW ??
+#ifdef CONFIG_MAX8903B_CHARGER
 	if (board_is_topaz_wifi()) {
 		printk("%s: setting USUS_pin_polarity = 1\n", __func__);
-		max8903_charger_device.dev.platform_data = &max8903_charger_pdata_topaz;
+		max8903b_charger_device.dev.platform_data = &max8903b_charger_pdata_topaz;
 		if (board_type > TOPAZ_EVT1) {
-			max8903_charger_pdata_topaz.USUS_pin_polarity = 1;
+			max8903b_charger_pdata_topaz.USUS_pin_polarity = 1;
 		}
 	} else {
 		if (board_is_opal_3g() || board_is_opal_wifi() || (board_is_topaz_3g() && (board_type >= TOPAZ3G_EVT1)) ) {
-			max8903_charger_pdata.USUS_pin_polarity = 1;
+			max8903b_charger_pdata.USUS_pin_polarity = 1;
 		}
 		max8903_charger_device.dev.platform_data = &max8903_charger_pdata;
 	}
+#endif
 #endif
 
 	msm8x60_init_uart12dm();
@@ -14152,6 +14243,8 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (machine_is_msm8x60_fluid())
 		cyttsp_set_params();
 #endif
+	// if (boardtype_is_3g()) {
+	// 	platform_device_register(&mdmgpio_device);
 	if (!machine_is_msm8x60_sim())
 		msm_fb_add_devices();
 	fixup_i2c_configs();

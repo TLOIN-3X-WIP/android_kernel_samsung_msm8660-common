@@ -764,6 +764,7 @@ static struct msm_gpiomux_config tenderloin_ebi2_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &ebi2_a_d,
 		},
 	},
+#if 0
 	{
 		.gpio      = 126,
 		.settings = {
@@ -771,6 +772,7 @@ static struct msm_gpiomux_config tenderloin_ebi2_configs[] __initdata = {
 			[GPIOMUX_ACTIVE] = &sdcc1_suspend_config,
 		},
 	},
+#endif
 	{
 		.gpio      = 127,
 		.settings = {
@@ -1191,6 +1193,36 @@ static struct msm_gpiomux_config msm8x60_uart_configs[] __initdata = {
 	},
 };
 
+static struct msm_gpiomux_config tenderloin_bt_configs_3g[] __initdata = {
+	{
+		.gpio      = BT_RST_N_3G,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_rst_n_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_rst_n_suspended_cfg,
+		},
+	},
+	{
+		.gpio      = BT_POWER_3G,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_power_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_power_suspended_cfg,
+		},
+	},
+	{
+		.gpio      = BT_WAKE_3G,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_wake_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_wake_suspended_cfg,
+		},
+	},
+	{
+		.gpio      = BT_HOST_WAKE_3G,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &bt_host_wake_active_cfg,
+			[GPIOMUX_SUSPENDED] = &bt_host_wake_suspended_cfg,
+		},
+	},
+};
 
 static struct msm_gpiomux_config tenderloin_bt_configs[] __initdata = {
 	{
@@ -2460,6 +2492,25 @@ tenderloin_gpiomux_cfgs[] __initdata = {
 	{tenderloin_ebi2_configs, ARRAY_SIZE(tenderloin_ebi2_configs)},
 	{msm8x60_isp_usb_configs, ARRAY_SIZE(msm8x60_isp_usb_configs)},
 #endif
+#endif
+	{NULL, 0},
+};
+
+struct msm_gpiomux_configs /* -JCS update for tenderloin TODO */
+tenderloin_3g_gpiomux_cfgs[] __initdata = {
+	{tenderloin_gsbi_configs, ARRAY_SIZE(tenderloin_gsbi_configs)},
+	{tenderloin_uart_configs, ARRAY_SIZE(tenderloin_uart_configs)},
+	{tenderloin_bt_configs_3g, ARRAY_SIZE(tenderloin_bt_configs)},
+	{tenderloin_snd_configs, ARRAY_SIZE(tenderloin_snd_configs)},
+	{msm8x60_pmic_configs, ARRAY_SIZE(msm8x60_pmic_configs)},
+	{tenderloin_lcdc_configs, ARRAY_SIZE(tenderloin_lcdc_configs)},
+	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},
+	{msm8x60_aux_pcm_configs, ARRAY_SIZE(msm8x60_aux_pcm_configs)},
+	{msm8x60_mdp_vsync_configs, ARRAY_SIZE(msm8x60_mdp_vsync_configs)},
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
+	{tenderloin_ebi2_configs, ARRAY_SIZE(tenderloin_ebi2_configs)},
+	// TODO - isp_usb_configs
+	{msm8x60_isp_usb_configs, ARRAY_SIZE(msm8x60_isp_usb_configs)},
 #endif
 	{NULL, 0},
 };
