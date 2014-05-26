@@ -2624,6 +2624,7 @@ tenderloin_3g_gpiomux_cfgs[] __initdata = {
 	{tenderloin_lcdc_configs, ARRAY_SIZE(tenderloin_lcdc_configs)},
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},
 	{msm8x60_aux_pcm_configs, ARRAY_SIZE(msm8x60_aux_pcm_configs)},
+	{msm8x60_cam_configs, ARRAY_SIZE(msm8x60_cam_configs)},
 	// {msm8x60_mdp_vsync_configs, ARRAY_SIZE(msm8x60_mdp_vsync_configs)},
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	{tenderloin_ebi2_configs, ARRAY_SIZE(tenderloin_ebi2_configs)},
