@@ -11338,6 +11338,8 @@ static int msm_sdcc_setup_vreg(int dev_id, unsigned char enable)
 	struct sdcc_reg *curr_vdd_reg, *curr_vccq_reg, *curr_vddp_reg;
 	struct sdcc_reg_data *curr;
 
+	if (4 == dev_id) goto out;
+
 	curr = &sdcc_vreg_data[dev_id - 1];
 	curr_vdd_reg = curr->vdd_data;
 	curr_vccq_reg = curr->vccq_data;

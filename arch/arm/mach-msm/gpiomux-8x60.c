@@ -541,6 +541,52 @@ static struct gpiomux_setting cam_gpio_outh_2m_pn = {
 	.pull = GPIOMUX_PULL_NONE,
 	.dir = GPIOMUX_OUT_HIGH,
 };
+
+static struct gpiomux_setting wlan_gpio_outh_8m_pn = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting wlan_gpio_outh_2m_pn = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting wlan_gpio_outl_8m_pn = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
+static struct gpiomux_setting wlan_gpio_outh_8m_pd = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_DOWN,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+static struct gpiomux_setting wlan_gpio_in_2m_pk = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_KEEPER,
+};
+
+static struct gpiomux_setting wlan_gpio_in_8m_pd = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_DOWN,
+};
+
+static struct gpiomux_setting wlan_gpio_in_8m_pu = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_UP,
+};
 #endif
 
 #ifdef CONFIG_MSM_GSBI9_UART
@@ -1135,6 +1181,26 @@ static struct msm_gpiomux_config msm8x60_isp_usb_configs[] __initdata = {
 };
 #endif
 
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
+static struct msm_gpiomux_config tenderloin_isp_usb_configs[] __initdata = {
+	{
+		.gpio      = ISP1763_INT_GPIO,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &usb_isp1763_actv_cfg,
+			[GPIOMUX_SUSPENDED] = &usb_isp1763_susp_cfg,
+		},
+	},
+	{
+		.gpio      = 152,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &usb_isp1763_actv_cfg,
+			[GPIOMUX_SUSPENDED] = &usb_isp1763_susp_cfg,
+		},
+	},
+
+};
+#endif
+
 static struct msm_gpiomux_config msm8x60_uart_configs[] __initdata = {
 	{ /* UARTDM_TX */
 		.gpio      = 53,
@@ -1251,6 +1317,56 @@ static struct msm_gpiomux_config tenderloin_bt_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &bt_host_wake_active_cfg,
 			[GPIOMUX_SUSPENDED] = &bt_host_wake_suspended_cfg,
+		},
+	},
+};
+
+static struct msm_gpiomux_config tenderloin_wlan_configs[] __initdata = {
+	{
+		.gpio      = TENDERLOIN_GPIO_WL_HOST_WAKE,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &wlan_gpio_in_8m_pd,
+			[GPIOMUX_SUSPENDED] = &wlan_gpio_in_8m_pd,
+		},
+	},
+	{
+		.gpio      = TENDERLOIN_GPIO_HOST_WAKE_WL,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &wlan_gpio_outh_8m_pn,
+			[GPIOMUX_SUSPENDED] = &wlan_gpio_outh_2m_pn,
+		},
+	},
+	{
+		.gpio      = TENDERLOIN_GPIO_WLAN_RST_N,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &wlan_gpio_outl_8m_pn,
+			[GPIOMUX_SUSPENDED] = &wlan_gpio_in_2m_pk,
+		},
+	},
+};
+
+static struct msm_gpiomux_config tenderloin_wlan_configs_3g[] __initdata = {
+	{
+		.gpio      = TENDERLOIN_GPIO_WL_HOST_WAKE,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &wlan_gpio_in_8m_pd,
+			[GPIOMUX_SUSPENDED] = &wlan_gpio_in_8m_pd,
+		},
+	},
+	{
+		.gpio      = TENDERLOIN_GPIO_HOST_WAKE_WL_3G,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &wlan_gpio_in_8m_pu,
+			[GPIOMUX_SUSPENDED] = &wlan_gpio_in_8m_pu,
+		},
+	},
+	{
+		// TODO - check/fix this in 2.6 kernel
+		.gpio      = TENDERLOIN_GPIO_WLAN_RST_N_3G,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &wlan_gpio_outh_8m_pd,
+			[GPIOMUX_SUSPENDED] = &wlan_gpio_outh_8m_pd,
+			// [GPIOMUX_SUSPENDED] = &wlan_gpio_in_2m_pk,
 		},
 	},
 };
@@ -2480,6 +2596,7 @@ tenderloin_gpiomux_cfgs[] __initdata = {
 	{tenderloin_gsbi_configs, ARRAY_SIZE(tenderloin_gsbi_configs)},
 	{tenderloin_uart_configs, ARRAY_SIZE(tenderloin_uart_configs)},
 	{tenderloin_bt_configs, ARRAY_SIZE(tenderloin_bt_configs)},
+	{tenderloin_wlan_configs, ARRAY_SIZE(tenderloin_wlan_configs)},
 	{tenderloin_snd_configs, ARRAY_SIZE(tenderloin_snd_configs)},
 	{msm8x60_pmic_configs, ARRAY_SIZE(msm8x60_pmic_configs)},
 	{tenderloin_lcdc_configs, ARRAY_SIZE(tenderloin_lcdc_configs)},
@@ -2490,7 +2607,7 @@ tenderloin_gpiomux_cfgs[] __initdata = {
 #if 0
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	{tenderloin_ebi2_configs, ARRAY_SIZE(tenderloin_ebi2_configs)},
-	{msm8x60_isp_usb_configs, ARRAY_SIZE(msm8x60_isp_usb_configs)},
+	{tenderloin_isp_usb_configs, ARRAY_SIZE(tenderloin_isp_usb_configs)},
 #endif
 #endif
 	{NULL, 0},
@@ -2501,12 +2618,13 @@ tenderloin_3g_gpiomux_cfgs[] __initdata = {
 	{tenderloin_gsbi_configs, ARRAY_SIZE(tenderloin_gsbi_configs)},
 	{tenderloin_uart_configs, ARRAY_SIZE(tenderloin_uart_configs)},
 	{tenderloin_bt_configs_3g, ARRAY_SIZE(tenderloin_bt_configs)},
+	{tenderloin_wlan_configs_3g, ARRAY_SIZE(tenderloin_wlan_configs_3g)},
 	{tenderloin_snd_configs, ARRAY_SIZE(tenderloin_snd_configs)},
 	{msm8x60_pmic_configs, ARRAY_SIZE(msm8x60_pmic_configs)},
 	{tenderloin_lcdc_configs, ARRAY_SIZE(tenderloin_lcdc_configs)},
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},
 	{msm8x60_aux_pcm_configs, ARRAY_SIZE(msm8x60_aux_pcm_configs)},
-	{msm8x60_mdp_vsync_configs, ARRAY_SIZE(msm8x60_mdp_vsync_configs)},
+	// {msm8x60_mdp_vsync_configs, ARRAY_SIZE(msm8x60_mdp_vsync_configs)},
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	{tenderloin_ebi2_configs, ARRAY_SIZE(tenderloin_ebi2_configs)},
 	// TODO - isp_usb_configs
