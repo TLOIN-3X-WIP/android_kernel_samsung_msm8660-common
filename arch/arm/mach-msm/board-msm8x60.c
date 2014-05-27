@@ -153,6 +153,8 @@
 #include <linux/isl29023.h>
 #endif
 
+#include <linux/mdmgpio.h>
+
 // Pointer to topaz/tenderloin opal/shortloin wifi/3G pin arrays
 int *pin_table = NULL;
 
@@ -502,6 +504,31 @@ static int configure_gpiomux_gpios(int on, int gpios[], int cnt)
 	if (ret)
 		for (; i >= 0; i--)
 			msm_gpiomux_put(gpios[i]);
+	return ret;
+}
+
+/* helper function to manipulate group of gpios (msm_gpiomux)*/
+static int configure_gpiomux_gpios2(int on, int gpios[], char *gpios2[], int cnt)
+{
+	int ret = 0;
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		//printk(KERN_ERR "%s:pin(%d):%s\n", __func__, gpios[i], on?"on":"off");
+		if (on) {
+			ret = gpio_request(gpios[i], gpios2[i]);
+			if (unlikely(ret))
+				break;
+		} else {
+			// ret = gpio_free(gpios[i]);
+			gpio_free(gpios[i]);
+			// if (unlikely(ret))
+				// return ret;
+		}
+	}
+	if (ret)
+		for (; i >= 0; i--)
+			gpio_free(gpios[i]);
 	return ret;
 }
 
@@ -1176,8 +1203,10 @@ static struct msm_pm_boot_platform_data msm_pm_boot_pdata __initdata = {
 
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 
+#ifndef CONFIG_MACH_TENDERLOIN
 #define ISP1763_INT_GPIO		117
 #define ISP1763_RST_GPIO		152
+#endif
 static struct resource isp1763_resources[] = {
 	[0] = {
 		.flags	= IORESOURCE_MEM,
@@ -1247,6 +1276,175 @@ static struct platform_device isp1763_device = {
 		.platform_data = &isp1763_pdata
 	}
 };
+
+#ifdef CONFIG_MACH_TENDERLOIN
+
+/*
+  This function only is charge of modem gpio initialize in board level, and should not
+  take responsiblity for enabling/disabling external modem, which will be implemented
+  in exmdm (external modem) driver.
+*/
+static int isp1763_modem_gpio_init(int on)
+{
+	int rc;
+	static int gpio_requested=0;
+
+	int gpio_pwr_3g_en = pin_table[TENDERLOIN_GPIO_3G_3V3_EN];
+
+	if (!gpio_requested)
+	{
+		rc = gpio_request(gpio_pwr_3g_en, "VDD_3V3_EN");
+		if (rc < 0) {
+			pr_err("%s: VDD_3V3_EN gpio %d request failed\n", __func__, gpio_pwr_3g_en);
+		}
+		else
+		{
+			pr_debug("%s: VDD_3V3_EN gpio %d statu: %d\n", __func__, gpio_pwr_3g_en, gpio_get_value(gpio_pwr_3g_en));
+		}
+
+		rc = gpio_request(GPIO_3G_DISABLE_N, "3G_DISABLE_N");
+		if (rc < 0) {
+			pr_err("%s: GPIO_3G_DISABLE_N gpio %d request failed\n", __func__, GPIO_3G_DISABLE_N);
+		}
+		else
+		{
+			pr_debug( "%s: GPIO_3G_DISABLE_N gpio %d status: %d\n", __func__, GPIO_3G_DISABLE_N, gpio_get_value(GPIO_3G_DISABLE_N));
+		}
+
+		rc = gpio_request(GPIO_3G_WAKE_N, "3G_WAKE");
+		if (rc < 0) {
+			pr_err("%s: GPIO_3G_WAKE_N gpio %d request failed\n", __func__, GPIO_3G_WAKE_N);
+		}
+
+		rc = gpio_request(ISP1763_DACK_GPIO, "ISP1763A_DACK");
+		if (rc < 0) {
+			pr_err("%s: ISP1763A_DACK gpio %d request failed\n", __func__, ISP1763_DACK_GPIO);
+		}
+
+		rc = gpio_request(ISP1763_DREQ_GPIO, "ISP1763A_DREQ");
+		if (rc < 0) {
+			pr_err("%s: ISP1763A_DREQ gpio %d request failed\n", __func__, ISP1763_DREQ_GPIO);
+		}
+		gpio_requested = 1;
+	}
+
+	gpio_set_value(GPIO_3G_DISABLE_N, 0);
+	gpio_set_value(gpio_pwr_3g_en, 0);
+
+	if (on)
+	{
+		mdelay(300);
+		gpio_set_value(gpio_pwr_3g_en, 1);
+		gpio_set_value(GPIO_3G_DISABLE_N, 1);
+	}
+
+	return 0;
+}
+
+static struct platform_device *isp1763_pdev=NULL;
+static int isp1763_modem_poweron_status(void)
+{
+	return isp1763_pdev? 1: 0;
+}
+
+static int isp1763_modem_poweron(int on)
+{
+	int ret=0;
+	static struct mutex poweron_lock;
+	static int inited = 0;
+
+	pr_info("%s: isp1763_pdev:%p, on:%d\n", __func__, isp1763_pdev, on);
+
+	if (!inited)
+	{
+		inited = 1;
+		mutex_init(&poweron_lock);
+	}
+
+	mutex_lock(&poweron_lock);
+	if (board_is_topaz_3g())
+	{
+		if (on && !isp1763_pdev)
+		{
+			isp1763_modem_gpio_init(1);
+			pr_info("%s: platform_device_register\n", __func__);
+			isp1763_pdev = platform_device_alloc(isp1763_device.name, 0);
+			if (!isp1763_pdev)
+			{
+				mutex_unlock(&poweron_lock);
+				pr_err("%s: Platform device allocation failed\n", __func__);
+				return -ENOMEM;
+			}
+			if ((ret=platform_device_add_resources(isp1763_pdev, isp1763_resources, ARRAY_SIZE(isp1763_resources)))!=0)
+				goto out_free_resources;
+			if ((ret=platform_device_add_data(isp1763_pdev, &isp1763_pdata,
+						sizeof(isp1763_pdata)))!=0)
+				goto out_free_resources;
+			if ((ret = platform_device_add(isp1763_pdev))!=0)
+				goto out_free_resources;
+		}
+		else if (!on && isp1763_pdev)
+		{
+			msleep(500);
+			pr_info("%s: platform_device_unregister\n", __func__);
+			platform_device_unregister(isp1763_pdev);
+			isp1763_pdev = NULL;
+			isp1763_modem_gpio_init(0);
+			msleep(500);
+		}
+	}
+	mutex_unlock(&poweron_lock);
+	pr_info("%s: isp1763_pdev:%p, on:%d -- return\n", __func__, isp1763_pdev, on);
+	return 0;
+
+out_free_resources:
+	pr_err("%s: out_free_resources\n", __func__);
+	platform_device_put(isp1763_pdev);
+	isp1763_pdev = NULL;
+	isp1763_modem_gpio_init(0);
+	pr_err("%s: return\n", __func__);
+	mutex_unlock(&poweron_lock);
+	return ret;
+}
+
+#endif
+#endif
+
+#ifdef CONFIG_MACH_TENDERLOIN
+
+static int set_gpio_value(int gpionum, int value)
+{
+	gpio_set_value_cansleep(gpionum, value);
+	return 0;
+}
+
+static int get_gpio_value(int gpionum)
+{
+	int value;
+	value = gpio_get_value_cansleep(gpionum);
+	return value;
+}
+
+static struct mdmgpio_platform_data mdmgpio_pdata = {
+	.uim_cd_gpio = GPIO_3G_UIM_CD_N,
+	.mdm_disable_gpio = GPIO_3G_DISABLE_N,
+	.set_gpio_value = set_gpio_value,
+	.get_gpio_value = get_gpio_value,
+#ifdef CONFIG_USB_PEHCI_HCD
+	.mdm_poweron    = isp1763_modem_poweron,
+	.mdm_poweron_status= isp1763_modem_poweron_status,
+#endif
+};
+
+struct platform_device mdmgpio_device = {
+	.name = "mdmgpio",
+	.id = -1,
+	.dev = {
+		.platform_data = &mdmgpio_pdata,
+	},
+};
+
+
 #endif
 
 
@@ -7490,7 +7688,7 @@ static struct platform_device *surf_devices[] __initdata = {
 	&msm_device_ssbi3,
 #endif
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
-	&isp1763_device,
+	// &isp1763_device,
 #endif
 
 #if defined (CONFIG_MSM_8x60_VOIP)
@@ -14225,8 +14423,16 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 #if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
-		machine_is_msm8x60_dragon())
-		msm8x60_cfg_isp1763();
+		machine_is_msm8x60_dragon() || machine_is_tenderloin()) {
+		if (machine_is_tenderloin()) {
+			if (board_is_topaz_3g()) {
+				msm8x60_cfg_isp1763();
+				isp1763_modem_poweron(1);
+			}
+		} else {
+			msm8x60_cfg_isp1763();
+		}
+	}
 #endif
 
 	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())
@@ -14245,8 +14451,8 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (machine_is_msm8x60_fluid())
 		cyttsp_set_params();
 #endif
-	// if (boardtype_is_3g()) {
-	// 	platform_device_register(&mdmgpio_device);
+	if (board_is_topaz_3g())
+	 	platform_device_register(&mdmgpio_device);
 	if (!machine_is_msm8x60_sim())
 		msm_fb_add_devices();
 	fixup_i2c_configs();
