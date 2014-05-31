@@ -1223,6 +1223,97 @@ static void __init msm8x60_cfg_isp1763(void)
 	isp1763_resources[1].end = gpio_to_irq(ISP1763_INT_GPIO);
 }
 
+#ifdef CONFIG_MACH_TENDERLOIN
+static uint32_t msmebi2_tlmm_cfgs[]=
+{
+	//control
+	GPIO_CFG(172, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),   // Interrupt (GPIO(INTERRUPT)
+	GPIO_CFG(152, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),   // ISP1763A.RESET_N (GPIO152)
+	GPIO_CFG(133, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_CS3_N (GPIO133)
+	GPIO_CFG(151, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_OE_N (GPIO151)
+	GPIO_CFG(157, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),	 // EBI2_WE_N (GPIO157)
+
+	//Address
+	GPIO_CFG(38, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_8 (GPIO38)
+	GPIO_CFG(123, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_7 (GPIO123)
+	GPIO_CFG(124, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_6 (GPIO124)
+	GPIO_CFG(125, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_5 (GPIO125)
+	GPIO_CFG(126, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_4 (GPIO126)
+	GPIO_CFG(127, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_3 (GPIO127)
+	GPIO_CFG(128, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_2 (GPIO128)
+	GPIO_CFG(129, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_1 (GPIO129)
+	GPIO_CFG(130, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),   // EBI2_ADDR_0 (GPIO130)
+
+	//Data
+	GPIO_CFG(135, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_15 (GPIO135)
+	GPIO_CFG(136, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_14 (GPIO136)
+	GPIO_CFG(137, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_13 (GPIO137)
+	GPIO_CFG(138, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_12 (GPIO138)
+	GPIO_CFG(139, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_11 (GPIO139)
+	GPIO_CFG(140, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_10 (GPIO140)
+	GPIO_CFG(141, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_9 (GPIO141)
+	GPIO_CFG(142, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_8 (GPIO142)
+	GPIO_CFG(143, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_7 (GPIO143)
+	GPIO_CFG(144, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_6 (GPIO144)
+	GPIO_CFG(145, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_5 (GPIO145)
+	GPIO_CFG(146, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_4 (GPIO146)
+	GPIO_CFG(147, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_3 (GPIO147)
+	GPIO_CFG(148, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_2 (GPIO148)
+	GPIO_CFG(149, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_1 (GPIO149)
+	GPIO_CFG(150, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),    // EBI2_AD_0 (GPIO150)
+};
+
+static int isp1763_setup_gpio(int enable)
+{
+	int status = 0;
+	static int gpio_requested = 0;
+	pr_info("%s\n", __func__);
+
+	if (!gpio_requested)
+	{
+
+		config_gpio_tlmm_table(msmebi2_tlmm_cfgs, ARRAY_SIZE(msmebi2_tlmm_cfgs));
+		status = gpio_request(ISP1763_INT_GPIO, "isp1763_usb");
+		if (status) {
+			pr_err("%s:Failed to request GPIO %d\n",
+						__func__, ISP1763_INT_GPIO);
+			return status;
+		}
+		status = gpio_request(ISP1763_RST_GPIO, "isp1763_usb");
+		if (status) {
+			pr_err("%s:Failed to request GPIO %d\n",
+						__func__, ISP1763_RST_GPIO);
+			gpio_free(ISP1763_INT_GPIO);
+			return status;
+		}
+		gpio_requested = 1;
+	}
+
+	if (enable) {
+		status = gpio_direction_input(ISP1763_INT_GPIO);
+		if (status) {
+			pr_err("%s:Failed to configure GPIO %d\n",
+					__func__, ISP1763_INT_GPIO);
+		}
+		status = gpio_direction_output(ISP1763_RST_GPIO, 1);
+		if (status) {
+			pr_err("%s:Failed to configure GPIO %d\n",
+					__func__, ISP1763_RST_GPIO);
+		}
+		pr_debug("\nISP GPIO configuration done\n");
+		return status;
+	}
+	else
+	{
+		status = gpio_direction_output(ISP1763_RST_GPIO, 0);
+		if (status) {
+			pr_err("%s:Failed to configure GPIO %d\n",
+					__func__, ISP1763_RST_GPIO);
+		}
+	}
+	return status;
+}
+#else
 static int isp1763_setup_gpio(int enable)
 {
 	int status = 0;
@@ -1263,6 +1354,7 @@ gpio_free_int:
 
 	return status;
 }
+#endif
 static struct isp1763_platform_data isp1763_pdata = {
 	.reset_gpio	= ISP1763_RST_GPIO,
 	.setup_gpio	= isp1763_setup_gpio
@@ -1293,6 +1385,7 @@ static int isp1763_modem_gpio_init(int on)
 
 	if (!gpio_requested)
 	{
+		gpio_tlmm_config(GPIO_CFG(gpio_pwr_3g_en, 0,GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		rc = gpio_request(gpio_pwr_3g_en, "VDD_3V3_EN");
 		if (rc < 0) {
 			pr_err("%s: VDD_3V3_EN gpio %d request failed\n", __func__, gpio_pwr_3g_en);
@@ -1301,6 +1394,7 @@ static int isp1763_modem_gpio_init(int on)
 		{
 			pr_debug("%s: VDD_3V3_EN gpio %d statu: %d\n", __func__, gpio_pwr_3g_en, gpio_get_value(gpio_pwr_3g_en));
 		}
+		gpio_direction_output(gpio_pwr_3g_en, 0);
 
 		rc = gpio_request(GPIO_3G_DISABLE_N, "3G_DISABLE_N");
 		if (rc < 0) {
@@ -1310,11 +1404,21 @@ static int isp1763_modem_gpio_init(int on)
 		{
 			pr_debug( "%s: GPIO_3G_DISABLE_N gpio %d status: %d\n", __func__, GPIO_3G_DISABLE_N, gpio_get_value(GPIO_3G_DISABLE_N));
 		}
+		gpio_direction_output(GPIO_3G_DISABLE_N, 0);
 
+		gpio_tlmm_config(GPIO_CFG(GPIO_3G_WAKE_N, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 		rc = gpio_request(GPIO_3G_WAKE_N, "3G_WAKE");
 		if (rc < 0) {
 			pr_err("%s: GPIO_3G_WAKE_N gpio %d request failed\n", __func__, GPIO_3G_WAKE_N);
 		}
+		gpio_direction_input(GPIO_3G_WAKE_N);
+
+		gpio_tlmm_config(GPIO_CFG(GPIO_3G_UIM_CD_N, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+		rc = gpio_request(GPIO_3G_UIM_CD_N, "UIM_CD");
+		if (rc < 0) {
+			printk(KERN_ERR "%s: GPIO_3G_UIM_CD_N gpio %d request failed\n", __func__, GPIO_3G_UIM_CD_N);
+		}
+		gpio_direction_input(GPIO_3G_UIM_CD_N);
 
 		rc = gpio_request(ISP1763_DACK_GPIO, "ISP1763A_DACK");
 		if (rc < 0) {
@@ -1336,6 +1440,8 @@ static int isp1763_modem_gpio_init(int on)
 		mdelay(300);
 		gpio_set_value(gpio_pwr_3g_en, 1);
 		gpio_set_value(GPIO_3G_DISABLE_N, 1);
+		// gpio_free(gpio_pwr_3g_en);
+		// gpio_free(GPIO_3G_DISABLE_N);
 	}
 
 	return 0;
@@ -6102,6 +6208,17 @@ static struct gpio_keys_button topaz_wifi_gpio_keys_buttons[] = {
 		.debounce_interval = 50,
 		.wakeup		= 1
 	},
+#if 0 && defined(CONFIG_USB_PEHCI_HCD)
+	{
+		.code           = KEY_UIM_INSERT,
+		.gpio           = (GPIO_3G_UIM_CD_N),
+		.desc           = "mdmuim",
+		.active_low     = 1,
+		.type		= EV_KEY,
+		.debounce_interval = 500,
+		.wakeup		= 1
+	},
+#endif
 };
 
 static struct gpio_keys_button topaz_3g_gpio_keys_buttons[] = {
@@ -10644,6 +10761,7 @@ static uint32_t topazwifi_tlmm_cfgs[] = {
 };
 
 static uint32_t topaz3g_tlmm_cfgs[] = {
+#if 0
 	/* GSBI10 GSBI uart */
 	GPIO_CFG(71, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	// yegw 2010-9-7 config gpio to GSBI function
@@ -10698,6 +10816,7 @@ static uint32_t topaz3g_tlmm_cfgs[] = {
 	GPIO_CFG(51, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(52, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	//HP_Effie, QUP5_SPI for lcd, End
+#endif
 };
 
 static uint32_t opal_tlmm_cfgs[] = {
@@ -14250,7 +14369,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 			machine_is_msm8x60_sim() ||
 			machine_is_msm8x60_fluid() ||
 			machine_is_msm8x60_dragon()
-			// || machine_is_tenderloin()
+			 || machine_is_tenderloin()
 			)
 		msm8x60_init_ebi2();
 	msm8x60_init_tlmm();
@@ -14435,6 +14554,9 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	}
 #endif
 
+	if (board_is_topaz_3g())
+	 	platform_device_register(&mdmgpio_device);
+
 	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())
 		platform_add_devices(charm_devices, ARRAY_SIZE(charm_devices));
 
@@ -14451,8 +14573,6 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	if (machine_is_msm8x60_fluid())
 		cyttsp_set_params();
 #endif
-	if (board_is_topaz_3g())
-	 	platform_device_register(&mdmgpio_device);
 	if (!machine_is_msm8x60_sim())
 		msm_fb_add_devices();
 	fixup_i2c_configs();
