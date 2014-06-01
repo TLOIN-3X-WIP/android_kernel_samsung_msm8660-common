@@ -10761,7 +10761,6 @@ static uint32_t topazwifi_tlmm_cfgs[] = {
 };
 
 static uint32_t topaz3g_tlmm_cfgs[] = {
-#if 0
 	/* GSBI10 GSBI uart */
 	GPIO_CFG(71, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	// yegw 2010-9-7 config gpio to GSBI function
@@ -10816,7 +10815,6 @@ static uint32_t topaz3g_tlmm_cfgs[] = {
 	GPIO_CFG(51, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(52, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	//HP_Effie, QUP5_SPI for lcd, End
-#endif
 };
 
 static uint32_t opal_tlmm_cfgs[] = {
