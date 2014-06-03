@@ -47,6 +47,7 @@ struct usbnet {
 	u32			xid;
 	u32			hard_mtu;	/* count any extra framing */
 	size_t			rx_urb_size;	/* size for rx urbs */
+	int			rx_queue_enable;
 	struct mii_if_info	mii;
 
 	/* various kinds of pending driver work */
@@ -191,8 +192,7 @@ extern void usbnet_cdc_status(struct usbnet *, struct urb *);
 enum skb_state {
 	illegal = 0,
 	tx_start, tx_done,
-	rx_start, rx_done, rx_cleanup,
-	unlink_start
+	rx_start, rx_done, rx_cleanup
 };
 
 struct skb_data {	/* skb->cb is one of these */
