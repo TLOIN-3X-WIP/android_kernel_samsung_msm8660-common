@@ -76,8 +76,6 @@ static int lcdc_off(struct platform_device *pdev)
 	mfd = platform_get_drvdata(pdev);
 	ret = panel_next_off(pdev);
 
-	printk(KERN_ERR "%s: CALLED\n", __func__);
-
 	clk_disable_unprepare(pixel_mdp_clk);
 	clk_disable_unprepare(pixel_lcdc_clk);
 

@@ -337,7 +337,6 @@ static int max8903b_resume(struct platform_device *pdev)
 
 	pdata = pdev->dev.platform_data;
 
-	printk("%s: resume\n", __func__);
 	rc = pdata->request_release_gpios(1);
 
 	return rc;
