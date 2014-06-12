@@ -260,7 +260,7 @@ void arch_reset(char mode, const char *cmd)
 
 	pm8xxx_reset_pwr_off(1);
 
-	if (cmd != NULL && *cmd != NULL) {
+	if (cmd && *cmd) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			__raw_writel(RESTART_FASTBOOT_MODE, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {

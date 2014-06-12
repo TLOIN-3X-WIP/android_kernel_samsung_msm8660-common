@@ -26,6 +26,8 @@
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
 
+extern bool gpio_can_debounce(unsigned gpio);
+
 struct gpio_button_data {
 	struct gpio_keys_button *button;
 	struct input_dev *input;

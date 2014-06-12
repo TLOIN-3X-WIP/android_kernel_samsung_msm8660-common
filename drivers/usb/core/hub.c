@@ -1822,12 +1822,14 @@ static int usb_enumerate_device_otg(struct usb_device *udev)
 
 				bus->hnp_support = 1;
 
+#if 0
 				/* a_hnp_support is not required for devices
 				 * compliant to revision 2.0 or subsequent
 				 * versions.
 				 */
 				if (le16_to_cpu(desc->bcdOTG) >= 0x0200)
 					goto out;
+#endif
 
 				/* Legacy B-device i.e compliant to spec
 				 * revision 1.3 expect A-device to set

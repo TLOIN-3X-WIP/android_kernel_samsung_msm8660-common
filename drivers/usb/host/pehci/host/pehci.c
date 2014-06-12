@@ -183,7 +183,7 @@ struct wake_lock pehci_wake_lock;
  -----------------------------------------------------*/
 
 /* used	when updating hcd data */
-static spinlock_t hcd_data_lock	= __ARCH_SPIN_LOCK_UNLOCKED;
+DEFINE_SPINLOCK(hcd_data_lock);
 
 static const char hcd_name[] = "ST-Ericsson ISP1763";
 static td_ptd_map_buff_t td_ptd_map_buff[TD_PTD_TOTAL_BUFF_TYPES];	/* td-ptd map buffer for all 1362 buffers */
