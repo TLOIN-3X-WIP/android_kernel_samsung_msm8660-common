@@ -2361,12 +2361,21 @@ static struct lsm303dlh_acc_platform_data lsm303dlh_acc_pdata = {
 	.poll_interval = 100,
 	.min_interval = LSM303DLH_ACC_MIN_POLL_PERIOD_MS,
 	.g_range = LSM303DLH_ACC_G_2G,
+#ifdef CONFIG_MACH_TENDERLOIN
+	.axis_map_x = 1,
+	.axis_map_y = 0,
+	.axis_map_z = 2,
+	.negate_x = 1,
+	.negate_y = 0,
+	.negate_z = 0,
+#else
 	.axis_map_x = 0,
 	.axis_map_y = 1,
 	.axis_map_z = 2,
 	.negate_x = 0,
 	.negate_y = 0,
 	.negate_z = 0,
+#endif
 	.gpio_int1 = LSM303DLH_ACC_DEFAULT_INT1_GPIO,
 	.gpio_int2 = LSM303DLH_ACC_DEFAULT_INT2_GPIO,
 };
@@ -2375,12 +2384,21 @@ static struct lsm303dlh_mag_platform_data lsm303dlh_mag_pdata = {
 	.poll_interval = 100,
 	.min_interval = LSM303DLH_MAG_MIN_POLL_PERIOD_MS,
 	.h_range = LSM303DLH_MAG_H_8_1G,
+#ifdef CONFIG_MACH_TENDERLOIN
+	.axis_map_x = 1,
+	.axis_map_y = 0,
+	.axis_map_z = 2,
+	.negate_x = 1,
+	.negate_y = 0,
+	.negate_z = 0,
+#else
 	.axis_map_x = 0,
 	.axis_map_y = 1,
 	.axis_map_z = 2,
 	.negate_x = 0,
 	.negate_y = 0,
 	.negate_z = 0,
+#endif
 };
 
 static struct i2c_board_info __initdata lsm303dlh_acc_i2c_board_info[] = {
@@ -2401,26 +2419,44 @@ static struct i2c_board_info __initdata lsm303dlh_mag_i2c_board_info[] = {
 #ifdef CONFIG_MPU_SENSORS_MPU3050
 static struct mpu3050_platform_data mpu3050_data = {
         .int_config = 0x10,
+#ifdef CONFIG_MACH_TENDERLOIN
+        .orientation = {   0,  -1,  0,
+                           1,  0,  0,
+                           0,  0,  1 },
+#else
         .orientation = {   1,  0,  0,
                            0,  1,  0,
                            0,  0,  1 },
+#endif
         .accel = {
                 .get_slave_descr = get_accel_slave_descr,
                 .adapt_num   = 0,
                 .bus         = EXT_SLAVE_BUS_SECONDARY,
                 .address     = 0x18,
+#ifdef CONFIG_MACH_TENDERLOIN
+                .orientation = {  0,  -1,  0,
+                                  1,  0,  0,
+                                  0,  0,  1 },
+#else
                 .orientation = {   1,  0,  0,
                                    0,  1,  0,
                                    0,  0,  1 },
+#endif
         },
         .compass = {
                 .get_slave_descr = get_compass_slave_descr,
                 .adapt_num   = 0,
                 .bus         = EXT_SLAVE_BUS_PRIMARY,
                 .address     = 0x1E,
+#ifdef CONFIG_MACH_TENDERLOIN
+                .orientation = {  0,  -1,  0,
+                                  1,  0,  0,
+                                  0,  0,  1 },
+#else
                 .orientation = {  1,  0,  0,
                                   0,  1,  0,
                                   0,  0,  1 },
+#endif
         },
 };
 
@@ -10518,21 +10554,6 @@ static void register_i2c_devices(void)
 			msm8x60_camera_i2c_devices.info,
 			msm8x60_camera_i2c_devices.len);
 #endif
-#ifdef CONFIG_MPU_SENSORS_MPU3050
-	if (machine_is_tenderloin())
-	{
-        lsm303dlh_acc_pdata.negate_x = 1;
-        lsm303dlh_acc_pdata.negate_z = 1;
-        lsm303dlh_mag_pdata.negate_x = 1;
-        lsm303dlh_mag_pdata.negate_z = 1;
-        mpu3050_data.orientation[0] = -mpu3050_data.orientation[0];
-        mpu3050_data.orientation[8] = -mpu3050_data.orientation[8];
-        mpu3050_data.accel.orientation[0] = -mpu3050_data.accel.orientation[0];
-        mpu3050_data.accel.orientation[8] = -mpu3050_data.accel.orientation[8];
-        mpu3050_data.compass.orientation[0] = -mpu3050_data.compass.orientation[0];
-        mpu3050_data.compass.orientation[8] = -mpu3050_data.compass.orientation[8];
-    }
-#endif // CONFIG_MPU_SENSORS_MPU3050
 #endif
 }
 
