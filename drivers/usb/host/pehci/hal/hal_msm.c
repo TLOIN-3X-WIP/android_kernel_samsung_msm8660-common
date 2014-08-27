@@ -33,7 +33,6 @@
 #include <linux/sched.h>
 #include <linux/completion.h>
 #include <linux/slab.h>
-// #include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/timer.h>
@@ -676,6 +675,8 @@ isp1763_probe(struct platform_device *pdev)
 	pr_debug("Scratch register is 0x%x\n", reg_data);
 	reg_data = 0xABCD;
 	isp1763_reg_write16(loc_dev, HC_SCRATCH_REG, reg_data);
+	mb();
+	udelay(100);
 	reg_data = isp1763_reg_read16(loc_dev, HC_SCRATCH_REG, reg_data);
 	pr_debug("After write, Scratch register is 0x%x\n", reg_data);
 

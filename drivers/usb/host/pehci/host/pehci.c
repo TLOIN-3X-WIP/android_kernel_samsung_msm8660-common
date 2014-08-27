@@ -30,7 +30,6 @@
 #include <linux/ioport.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-// #include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/timer.h>
@@ -183,7 +182,7 @@ struct wake_lock pehci_wake_lock;
  -----------------------------------------------------*/
 
 /* used	when updating hcd data */
-static spinlock_t hcd_data_lock	= __ARCH_SPIN_LOCK_UNLOCKED;
+DEFINE_SPINLOCK(hcd_data_lock);
 
 static const char hcd_name[] = "ST-Ericsson ISP1763";
 static td_ptd_map_buff_t td_ptd_map_buff[TD_PTD_TOTAL_BUFF_TYPES];	/* td-ptd map buffer for all 1362 buffers */
@@ -980,7 +979,7 @@ pehci_hcd_qtd_schedule(phci_hcd	* hcd, struct ehci_qtd *qtd,
 	pehci_check("newqtd being scheduled, device: %d,map: %x\n",
 		    urb->dev->devnum, td_ptd_map->ptd_bitmap);
 
-	//udelay(100);
+	udelay(100);
 
 	memset(qha, 0, sizeof(isp1763_qha));
 	/*convert qtd to qha */
@@ -4495,8 +4494,9 @@ pehci_hcd_start(struct usb_hcd *usb_hcd)
 	isp1763_reg_write16(pehci_hcd->dev, pehci_hcd->regs.hwmodecontrol,
 		hwmodectrl);	
 	printk(KERN_NOTICE "Mode Ctrl Value after buswidth: %x\n", hwmodectrl);
-
+	mb();
 	isp1763_reg_write16(pehci_hcd->dev, pehci_hcd->regs.scratch, 0x3344);
+	ndelay(100);
 
 	ul_scratchval =
 		isp1763_reg_read16(pehci_hcd->dev, pehci_hcd->regs.scratch,

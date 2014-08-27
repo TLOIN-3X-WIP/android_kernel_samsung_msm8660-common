@@ -158,12 +158,12 @@ static void cdc_ncm_set_urb_size(struct usbnet *dev, int size)
 	struct cdc_ncm_ctx *ctx;
 	ctx = (struct cdc_ncm_ctx *)dev->data[0];
 
-  	if ( size == ctx->rx_max) {
+	if ( size == ctx->rx_max) {
 		dev->rx_queue_enable = 1;
 	} else {
 		dev->rx_queue_enable = 0;
 	}
-  
+
 	dev->rx_urb_size = size;
 	usbnet_unlink_rx_urbs(dev);
 }
@@ -615,18 +615,17 @@ advance:
 	 * start IPv6 negotiation and more.
 	 */
 
-    /* MBM - Enable autosuspend & remotewakeup on the device */
+	/* MBM - Enable autosuspend & remotewakeup on the device */
 	usb_enable_autosuspend(dev->udev);
 	if (device_can_wakeup(&dev->udev->dev))
 		device_init_wakeup(&dev->udev->dev, 1);
 
-	dev_info(&dev->udev->dev, "wakeup: %s\n", device_can_wakeup(&dev->udev->dev)
-		? (device_may_wakeup(&dev->udev->dev) ? "enabled" : "disabled")
-		: "");
-	
-    /* MBM - Set friendly name for Android */
-	strcpy(dev->net->name, "rmnet%d");
+		dev_info(&dev->udev->dev, "wakeup: %s\n", device_can_wakeup(&dev->udev->dev)
+				? (device_may_wakeup(&dev->udev->dev) ? "enabled" : "disabled")
+						: "");
 
+	/* MBM - Set friendly name for Android */
+	strcpy(dev->net->name, "rmnet%d");
 	netif_carrier_off(dev->net);
 	ctx->tx_speed = ctx->rx_speed = 0;
 	return 0;
@@ -1007,13 +1006,13 @@ static int cdc_ncm_rx_fixup(struct usbnet *dev, struct sk_buff *skb_in)
 	if (le32_to_cpu(nth16->dwSignature) != USB_CDC_NCM_NTH16_SIGN) {
 		ctx->packet_cnt++;
 		pr_debug("invalid NTH16 signature <%u>, packet_cnt = %d\n",
-			 le32_to_cpu(nth16->dwSignature), ctx->packet_cnt);
+		le32_to_cpu(nth16->dwSignature), ctx->packet_cnt);
 
-        /* MBM - Discard any spurious 512 byte packets
-           to prevent driver from stalling */
+		/* MBM - Discard any spurious 512 byte packets
+		to prevent driver from stalling */
 
 		if (skb_in->len == ctx->rx_max) {
-		  cdc_ncm_set_urb_size(dev, CDC_NCM_MIN_TX_PKT);
+			cdc_ncm_set_urb_size(dev, CDC_NCM_MIN_TX_PKT);
 		} else if (ctx->packet_cnt == 15) {
 			pr_debug("next packet should be on 8k boundery. Restart the rx queue with %d urb size\n", ctx->rx_max);
 			cdc_ncm_set_urb_size(dev, ctx->rx_max);
@@ -1022,11 +1021,10 @@ static int cdc_ncm_rx_fixup(struct usbnet *dev, struct sk_buff *skb_in)
 	}
 
 	if (skb_in->len == CDC_NCM_MIN_TX_PKT && ctx->packet_cnt != 0) {
-	  	pr_debug("packet not on boundery\n");
+		pr_debug("packet not on boundery\n");
 	}
 
 	ctx->packet_cnt = 0;
-
 	len = le16_to_cpu(nth16->wBlockLength);
 	if (len > ctx->rx_max) {
 		pr_debug("unsupported NTB block length %u/%u\n", len,
@@ -1107,8 +1105,8 @@ static int cdc_ncm_rx_fixup(struct usbnet *dev, struct sk_buff *skb_in)
 			if (!skb)
 				goto error;
 			skb->len = len;
-            /* MBM - Set truesize to enable TCP Sliding
-               Window to work properly */
+			/* MBM - Set truesize to enable TCP Sliding
+			Window to work properly */
 			skb->truesize = len + sizeof(struct sk_buff);
 			skb->data = ((u8 *)skb_in->data) + offset;
 			skb_set_tail_pointer(skb, len);
@@ -1191,9 +1189,9 @@ static void cdc_ncm_status(struct usbnet *dev, struct urb *urb)
 		else {
 			netif_carrier_off(dev->net);
 			ctx->tx_speed = ctx->rx_speed = 0;
-            /* MBM - Make sure next URB is 512 bytes
-               to capture any spurious pakets during
-               next connetion */
+			/* MBM - Make sure next URB is 512 bytes
+			to capture any spurious pakets during
+			next connetion */
 			ctx->packet_cnt = 0;
 			cdc_ncm_set_urb_size(dev, CDC_NCM_MIN_TX_PKT);
 		}
