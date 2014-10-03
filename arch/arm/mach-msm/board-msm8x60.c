@@ -2949,8 +2949,10 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.bam_disable		 = 1, // -JCS TODO
 	.hsdrvslope			= 0x05, // -JCS TODO
 #ifdef CONFIG_USB_EHCI_MSM_72K
+#ifndef CONFIG_MACH_TENDERLOIN
 	.pmic_id_notif_init = msm_hsusb_pmic_id_notif_init,
 	.phy_id_setup_init = msm_hsusb_phy_id_setup_init,
+#endif
 #endif
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
