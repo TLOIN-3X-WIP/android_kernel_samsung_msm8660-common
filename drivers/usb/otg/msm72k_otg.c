@@ -52,10 +52,14 @@ static int is_host(void)
 {
 	struct msm_otg *dev = the_msm_otg;
 
+#ifdef CONFIG_USB_DISABLE_OTG_PIN
+	return 0;
+#else
 	if (dev->pdata->otg_mode == OTG_ID)
 		return (OTGSC_ID & readl(USB_OTGSC)) ? 0 : 1;
 	else
 		return !test_bit(ID, &dev->inputs);
+#endif
 }
 
 static int is_b_sess_vld(void)
@@ -142,11 +146,6 @@ static void enable_idgnd(struct msm_otg *dev)
 {
 	unsigned temp;
 
-	/* Do nothing if OTG PIN detection is disabled */
-#ifdef CONFIG_USB_DISABLE_OTG_PIN
-	return;
-#endif
-
 	/* Do nothing if instead of ID pin, USER controls mode switch */
 	if (dev->pdata->otg_mode == OTG_USER_CONTROL)
 		return;
@@ -154,18 +153,17 @@ static void enable_idgnd(struct msm_otg *dev)
 	ulpi_write(dev, (1<<4), 0x0E);
 	ulpi_write(dev, (1<<4), 0x11);
 	ulpi_write(dev, (1<<0), 0x0B);
+#ifdef CONFIG_USB_DISABLE_OTG_PIN
+	temp = OTGSC_IDPU;
+#else
 	temp = OTGSC_IDIE | OTGSC_IDPU;
+#endif
 	writel_relaxed(readl_relaxed(USB_OTGSC) | temp, USB_OTGSC);
 }
 
 static void disable_idgnd(struct msm_otg *dev)
 {
 	unsigned temp;
-
-	/* Do nothing if OTG PIN detection is disabled */
-#ifdef CONFIG_USB_DISABLE_OTG_PIN
-	return;
-#endif
 
 	/* Do nothing if instead of ID pin, USER controls mode switch */
 	if (dev->pdata->otg_mode == OTG_USER_CONTROL)
@@ -1368,8 +1366,12 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 			 * VBUS when Micro/Mini-A cable is connected
 			 * with out user intervention.
 			 */
+#ifdef CONFIG_USB_DISABLE_OTG_PIN
+			set_bit(ID, &dev->inputs);
+#else
 			set_bit(A_BUS_REQ, &dev->inputs);
 			clear_bit(ID, &dev->inputs);
+#endif
 		}
 		writel(otgsc, USB_OTGSC);
 		work = 1;
@@ -1736,11 +1738,15 @@ reset_link:
 
 	clk_disable(dev->alt_core_clk);
 
+#ifdef CONFIG_USB_DISABLE_OTG_PIN
+	mode = USBMODE_SDIS | USBMODE_DEVICE;
+#else
 	if ((xceiv->gadget && xceiv->gadget->is_a_peripheral) ||
 			test_bit(ID, &dev->inputs))
 		mode = USBMODE_SDIS | USBMODE_DEVICE;
 	else
 		mode = USBMODE_SDIS | USBMODE_HOST;
+#endif
 	writel(mode, USB_USBMODE);
 
 	writel_relaxed((readl_relaxed(USB_OTGSC) | OTGSC_IDPU), USB_OTGSC);
