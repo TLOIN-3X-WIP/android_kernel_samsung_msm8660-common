@@ -627,10 +627,3 @@ config USB_OCTEON2_COMMON
 	bool
 	default y if USB_OCTEON_EHCI || USB_OCTEON_OHCI
 
-config USB_DISABLE_OTG_PIN
-	bool "Disable USB OTG Host-mode detection via OTG pin"
-	depends on USB_MSM_OTG_72K && ARCH_MSM
-	---help---
-	  This allows disabling Host-mode detection via OTG pin without
-	  using OTG_USER_CONTROL mode since using OTG_USER_CONTROL seems
-	  to conflict with multi-charger detection. For TPTOOLBOX.
