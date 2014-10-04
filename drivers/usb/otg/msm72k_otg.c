@@ -2555,10 +2555,62 @@ set_clr_err(struct device *_dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR(clr_err, S_IRUGO | S_IWUSR, NULL, set_clr_err);
 
+#ifdef CONFIG_USB_EHCI_MSM_72K
+static int host_enabled = 1;
+static int show_enable_host(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, 8, "%d\n", host_enabled);
+}
+
+static ssize_t
+set_enable_host(struct device *_dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	static void (*saved_start_host)	(struct usb_bus *bus, int suspend) = NULL;
+	static struct usb_bus		*saved_host = NULL;
+	struct msm_otg *dev = the_msm_otg;
+	enum usb_otg_state state;
+	unsigned long flags;
+	struct otg_transceiver *xceiv;
+	int value;
+
+	sscanf(buf, "%d", &value);
+
+	xceiv = otg_get_transceiver();
+
+	if (!value && host_enabled) {
+		msm_otg_start_host(xceiv, REQUEST_STOP);
+		usb_unregister_notify(&dev->usbdev_nb);
+		saved_start_host = dev->start_host;
+		saved_host = dev->otg.host;
+		dev->otg.host = 0;
+		dev->start_host = 0;
+		disable_idgnd(dev);
+		if (!dev->otg.gadget)
+			disable_idabc(dev);
+		host_enabled = 0;
+	} else if (!!value && !host_enabled) {
+		if (saved_start_host && saved_host) {
+			dev->start_host = saved_start_host;
+			msm_otg_set_host(xceiv, saved_host);
+			host_enabled = 1;
+		}
+	}
+	otg_put_transceiver(xceiv);
+	return count;
+}
+static DEVICE_ATTR(enable_host, S_IRUGO | S_IWUSR,
+				show_enable_host, set_enable_host);
+#endif
+
 static struct attribute *msm_otg_attrs[] = {
 	&dev_attr_pwr_down.attr,
 	&dev_attr_srp_req.attr,
 	&dev_attr_clr_err.attr,
+#ifdef CONFIG_USB_EHCI_MSM_72K
+	&dev_attr_enable_host.attr,
+#endif
 	NULL,
 };
 
