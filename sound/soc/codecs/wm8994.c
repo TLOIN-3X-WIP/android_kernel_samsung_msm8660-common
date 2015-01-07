@@ -2532,6 +2532,7 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 
+#if 0
 	switch (control->type) {
 	case WM8994:
 		snd_soc_update_bits(codec, WM8994_MICBIAS, WM8994_MICD_ENA, 0);
@@ -2541,6 +2542,7 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 				    WM8958_MICD_ENA, 0);
 		break;
 	}
+#endif
 
 	// -JCS TODO - CHECK
 	for (i = 0; i < ARRAY_SIZE(wm8994->fll); i++) {
@@ -2601,6 +2603,7 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 				 i + 1, ret);
 	}
 
+#if 0
 	switch (control->type) {
 	case WM8994:
 		if (wm8994->micdet[0].jack || wm8994->micdet[1].jack)
@@ -2613,6 +2616,7 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 					    WM8958_MICD_ENA, WM8958_MICD_ENA);
 		break;
 	}
+#endif
 
 	pm_runtime_put(codec->dev);
 
@@ -2901,8 +2905,6 @@ static void wm8958_hp_micdet(u16 status, void *data)
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int oldtype = 0;
 
-	printk(KERN_DEBUG "%s: status=%x\n", __func__, status);
-
 	oldtype = wm8994->micdet[0].jack->jack->type;
 	if(0x203 == status && !(wm8994->pdata->jack_is_mic) ){
 		headphone_plugged = 1;
@@ -2977,8 +2979,6 @@ int wm8958_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack,
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	struct wm8994 *control = codec->control_data;
 
-	printk(KERN_DEBUG "%s\n", __func__);
-
 	if (control->type != WM8958) {
 		printk(KERN_DEBUG "%s: invalid type\n", __func__);
 		return -EINVAL;
@@ -2997,12 +2997,12 @@ int wm8958_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack,
 		wm8994->jack_cb_data = cb_data;
 
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
-				    2| WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
+				    2 | WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
 
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 				    WM8958_MICD_ENA, 0);
 
-		msleep(100);
+		msleep(250);
 
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 				    2 | WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
@@ -3022,8 +3022,6 @@ static irqreturn_t wm8958_mic_irq(int irq, void *data)
 	struct snd_soc_codec *codec = wm8994->codec;
 	int reg = 0;
 	int i = 0;
-
-	printk(KERN_DEBUG "%s\n", __func__);
 
 	reg = snd_soc_read(codec, WM8958_MIC_DETECT_3);
 
@@ -3189,8 +3187,7 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 					 "Failed to request Mic detect IRQ: %d\n",
 					 ret);
 
-			// -JCS TODO
-			// set_irq_wake(gpio_to_irq(wm8994->micdet_irq), 1);
+			irq_set_irq_wake(gpio_to_irq(wm8994->micdet_irq), 1);
 		}
 	}
 

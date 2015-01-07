@@ -34,6 +34,7 @@
 
 #include <sound/jack.h>
 #include <linux/mfd/wm8994/registers.h>
+#include <linux/wakelock.h>
 
 #define LOOPBACK_ENABLE		0x1
 #define LOOPBACK_DISABLE	0x0
@@ -56,6 +57,7 @@
 
 int headphone_plugged = 0;
 struct switch_dev *headphone_switch;
+struct wake_lock jack_wlock;
 
 #define WM_FS 48000
 #define WM_CHANNELS 2
@@ -1538,6 +1540,8 @@ static int jack_notifier_event(struct notifier_block *nb, unsigned long event, v
 		codec = jack->codec;
 		wm8994 = snd_soc_codec_get_drvdata(codec);
 
+		wake_lock_timeout(&jack_wlock, msecs_to_jiffies(2000));
+
 		if(1 == event){
 			// Someone inserted a jack, we need to turn on mic bias2 for headset mic detection
 			snd_soc_dapm_force_enable_pin( &codec->dapm, "MICBIAS2");
@@ -1820,6 +1824,8 @@ static int __init msm_audio_init(void)
 	if (!msm_audio_snd_device)
 		return -ENOMEM;
 
+	wake_lock_init(&jack_wlock, WAKE_LOCK_SUSPEND, "hp-jack");
+
 	platform_set_drvdata(msm_audio_snd_device, &snd_soc_card_msm);
 	ret = platform_device_add(msm_audio_snd_device);
 	if (ret) {
@@ -1835,6 +1841,7 @@ static int __init msm_audio_init(void)
 
 static void __exit msm_audio_exit(void)
 {
+	wake_lock_destroy(&jack_wlock);
 	platform_device_unregister(msm_audio_snd_device);
 }
 
