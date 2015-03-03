@@ -302,6 +302,7 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 
 	memset(&afe_config, 0, sizeof(afe_config));
 
+	printk(KERN_INFO "%s\n", __func__);
 	wake_lock(&drv->rx_idlelock);
 
 	if (drv->snddev_vreg) {
@@ -432,6 +433,7 @@ static int snddev_icodec_open_tx(struct snddev_icodec_state *icodec)
 	union afe_port_config afe_config;
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;;
 
+	printk(KERN_INFO "%s\n", __func__);
 	wake_lock(&drv->tx_idlelock);
 
 	if (drv->snddev_vreg)
@@ -583,6 +585,8 @@ static int snddev_icodec_close_rx(struct snddev_icodec_state *icodec)
 {
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
 
+	printk(KERN_INFO "%s\n", __func__);
+
 	wake_lock(&drv->rx_idlelock);
 
 	if (drv->snddev_vreg)
@@ -624,6 +628,7 @@ static int snddev_icodec_close_tx(struct snddev_icodec_state *icodec)
 {
 	struct snddev_icodec_drv_state *drv = &snddev_icodec_drv;
 
+	printk(KERN_INFO "%s\n", __func__);
 	wake_lock(&drv->tx_idlelock);
 
 	if (drv->snddev_vreg)

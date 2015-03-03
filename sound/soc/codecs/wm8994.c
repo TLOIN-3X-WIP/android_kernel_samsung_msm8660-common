@@ -11,6 +11,8 @@
  * published by the Free Software Foundation.
  */
 
+#define DEBUG 1
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -827,12 +829,14 @@ static int late_enable_ev(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		if (wm8994->aif1clk_enable) {
+			printk(KERN_INFO "%s: enable AIF1\n", __func__);
 			snd_soc_update_bits(codec, WM8994_AIF1_CLOCKING_1,
 					    WM8994_AIF1CLK_ENA_MASK,
 					    WM8994_AIF1CLK_ENA);
 			wm8994->aif1clk_enable = 0;
 		}
 		if (wm8994->aif2clk_enable) {
+			printk(KERN_INFO "%s: enable AIF2\n", __func__);
 			snd_soc_update_bits(codec, WM8994_AIF2_CLOCKING_1,
 					    WM8994_AIF2CLK_ENA_MASK,
 					    WM8994_AIF2CLK_ENA);
@@ -853,14 +857,19 @@ static int late_disable_ev(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 
+	if (event) {
+		printk(KERN_INFO "%s: event %d for widget %s\n", __func__, event, w->name);
+	}
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMD:
 		if (wm8994->aif1clk_disable) {
+			printk(KERN_INFO "%s: disable AIF1\n", __func__);
 			snd_soc_update_bits(codec, WM8994_AIF1_CLOCKING_1,
 					    WM8994_AIF1CLK_ENA_MASK, 0);
 			wm8994->aif1clk_disable = 0;
 		}
 		if (wm8994->aif2clk_disable) {
+			printk(KERN_INFO "%s: disable AIF2\n", __func__);
 			snd_soc_update_bits(codec, WM8994_AIF2_CLOCKING_1,
 					    WM8994_AIF2CLK_ENA_MASK, 0);
 			wm8994->aif2clk_disable = 0;
@@ -877,6 +886,7 @@ static int aif1clk_ev(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 
+	printk(KERN_INFO "%s: event %d for widget %s\n", __func__, event, w->name);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		wm8994->aif1clk_enable = 1;
@@ -895,6 +905,7 @@ static int aif2clk_ev(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 
+	printk(KERN_INFO "%s: event %d for widget %s\n", __func__, event, w->name);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		wm8994->aif2clk_enable = 1;
@@ -917,6 +928,7 @@ static int adc_mux_ev(struct snd_soc_dapm_widget *w,
 static int micbias_ev(struct snd_soc_dapm_widget *w,
 		      struct snd_kcontrol *kcontrol, int event)
 {
+	printk(KERN_INFO "%s: event %d for widget %s\n", __func__, event, w->name);
 	late_enable_ev(w, kcontrol, event);
 	return 0;
 }
@@ -1012,6 +1024,12 @@ static int post_ev(struct snd_soc_dapm_widget *w,
 		snd_soc_read(codec,
 			     WM8994_RATE_STATUS));
 
+	if (wm8994->aif1clk_enable || wm8994->aif1clk_disable ||
+			wm8994->aif2clk_enable || wm8994->aif2clk_disable) {
+		printk(KERN_INFO "%s: e1=%d d1=%d e2=%d d2=%d\n",
+				__func__, wm8994->aif1clk_enable, wm8994->aif1clk_disable,
+			wm8994->aif2clk_enable, wm8994->aif2clk_disable);
+	}
 	// TODO -JCS CHECK:
 	// Handle late enables for sequences like MICBIAS ...
 	if (wm8994->aif1clk_enable) {
@@ -1724,6 +1742,9 @@ static int _wm8994_set_fll(struct snd_soc_codec *codec, int id, int src,
 	struct fll_div fll;
 	u16 reg, aif1, aif2;
 
+	printk(KERN_INFO "%s: id=%d src=%d freq_in=%u freq_out=%u\n",
+			__func__, id, src, freq_in, freq_out);
+
 	aif1 = snd_soc_read(codec, WM8994_AIF1_CLOCKING_1)
 		& WM8994_AIF1CLK_ENA;
 
@@ -1847,6 +1868,9 @@ static int wm8994_set_dai_sysclk(struct snd_soc_dai *dai,
 	struct snd_soc_codec *codec = dai->codec;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int i;
+
+	printk(KERN_INFO "%s: dai_id=%d clk_id=%d dir=%d freq=%u\n",
+			__func__, dai->id, clk_id, dir, freq);
 
 	switch (dai->id) {
 	case 1:
@@ -2540,6 +2564,33 @@ struct snd_soc_dai_driver wm8994_dai[] = {
 	}
 };
 
+void wm8958_clocking_check(struct snd_soc_codec *codec, char *f)
+{
+	unsigned r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13;
+
+	r0 = snd_soc_read(codec, WM8958_MIC_DETECT_3);
+	r1 = snd_soc_read(codec, WM8994_AIF1_CLOCKING_1);
+	r2 = snd_soc_read(codec, WM8994_AIF2_CLOCKING_1);
+	r3 = snd_soc_read(codec, WM8994_CLOCKING_1);
+	r4 = snd_soc_read(codec, WM8994_AIF1_CLOCKING_2);
+	r5 = snd_soc_read(codec, WM8994_AIF2_CLOCKING_2);
+	r6 = snd_soc_read(codec, WM8994_AIF1_RATE);
+	r7 = snd_soc_read(codec, WM8994_AIF2_RATE);
+	r8 = snd_soc_read(codec, WM8994_AIF1_MASTER_SLAVE);
+	r9 = snd_soc_read(codec, WM8994_AIF2_MASTER_SLAVE);
+	r10 = snd_soc_read(codec, WM8994_FLL1_CONTROL_1);
+	r11 = snd_soc_read(codec, WM8994_FLL2_CONTROL_1);
+	r12 = snd_soc_read(codec, WM8994_FLL1_CONTROL_5);
+	r13 = snd_soc_read(codec, WM8994_FLL2_CONTROL_5);
+	printk(KERN_ERR "%s: clocking aif1=0x%x aif2=0x%x src=0x%x ms1=0x%x ms2=0x%x\n",
+			f, r1, r2, r3, r8, r9);
+	printk(KERN_ERR "%s: clocking aif1b=0x%x aif2b=0x%x aif1c=0x%x aif2c=0x%x\n",
+			f, r4, r5, r6, r7);
+	printk(KERN_ERR "%s: clocking fll1a=0x%x fll2a=0x%x fll1b=0x%x fll2b=0x%x micd=0x%x\n",
+			f, r10, r11, r12, r13, r0);
+}
+EXPORT_SYMBOL_GPL(wm8958_clocking_check);
+
 #ifdef CONFIG_PM
 static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 {
@@ -2548,6 +2599,10 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 	int i, ret;
 
 	wm8994->suspended = true;
+
+	printk(KERN_ERR "%s\n", __func__);
+
+	wm8958_clocking_check(codec, __func__);
 
 	switch (control->type) {
 	case WM8994:
@@ -2580,6 +2635,9 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 	unsigned int val, mask;
+
+
+	printk(KERN_ERR "%s\n", __func__);
 
 	pm_runtime_get_sync(codec->dev);
 
@@ -2932,8 +2990,8 @@ static void wm8958_hp_micdet(u16 status, void *data)
 		wm8994->pdata->jack_is_mic = true;
 		wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
 		input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
-						    SW_MICROPHONE_INSERT,
-					        1);		
+							SW_MICROPHONE_INSERT,
+							1);
 	}else if(7 == status && wm8994->pdata->jack_is_mic == false) { 
 		headphone_plugged = 2;
 		printk(KERN_INFO "%s: Reporting Headphones inserted\n", __func__);
