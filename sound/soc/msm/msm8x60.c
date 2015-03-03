@@ -402,7 +402,7 @@ static int msm_device_info(struct snd_kcontrol *kcontrol,
 }
 
 #ifdef CONFIG_MACH_TENDERLOIN
-static int configure_wm_hw(struct msm_snddev_info *dev_info, struct snd_soc_codec *codec)
+static int configure_wm_hw(struct msm_snddev_info *dev_info, struct snd_soc_codec *codec, int enable)
 {
 	int rc = 0;
 
@@ -417,6 +417,23 @@ static int configure_wm_hw(struct msm_snddev_info *dev_info, struct snd_soc_code
 		int aifclk = 0;
 		int bclk_rate = 0;
 		static int bclk_rate_tx = 0, bclk_rate_rx = 0;
+
+
+		if (!enable) {
+			if (dev_info->capability & SNDDEV_CAP_RX) {
+				rt = snd_soc_get_pcm_runtime(codec->card, "Playback");
+				bclk_rate_rx = 0;
+			} else {
+				rt = snd_soc_get_pcm_runtime(codec->card, "Record");
+				bclk_rate_tx = 0;
+			}
+			rc = snd_soc_dai_set_sysclk(rt->codec_dai,
+					WM8994_SYSCLK_MCLK1, WM_FLL, 0);
+			if (rc < 0) {
+				pr_err("Failed to set sysclk: ret %d\n", rc);
+			}
+			return rc;
+		}
 
 		if (dev_info->capability & SNDDEV_CAP_RX) {
 			rt = snd_soc_get_pcm_runtime(codec->card, "Playback");
@@ -513,7 +530,7 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 
 	if (set) {
 	        #ifndef CONFIG_USA_MODEL_SGH_T989
-		pr_info("Device %s Opened = %d\n", dev_info->name, dev_info->opened);
+		pr_info("Device %s Opened = %d (Opening)\n", dev_info->name, dev_info->opened);
 		#endif
 		if (!dev_info->opened) {
 #if defined (CONFIG_TARGET_LOCALE_USA)
@@ -663,11 +680,12 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 				}
 			}
 #ifdef CONFIG_MACH_TENDERLOIN
-			if (configure_wm_hw(dev_info, codec))
+			if (configure_wm_hw(dev_info, codec, 1))
 				pr_err("%s: Could not configure wolfson hw properly!\n", __func__);
 #endif
 		}
 	} else {
+		pr_info("Device %s Opened = %d (Closing)\n", dev_info->name, dev_info->opened);
 		if (dev_info->opened) {
 #if defined (CONFIG_TARGET_LOCALE_USA)
 			if((!strcmp(dev_info->name,"dualmic_handset_ef_tx"))&&(!strcmp(dev_info->name,"handset_call_rx")))
@@ -679,6 +697,7 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 			broadcast_event(AUDDEV_EVT_REL_PENDING,
 						route_cfg.dev_id,
 						SESSION_IGNORE);
+			pr_info("Device trying to close : %s\n", dev_info->name);
 			rc = dev_info->dev_ops.close(dev_info);
 			if (rc < 0) {
 				pr_err("%s:Snd device failed close!\n",
@@ -718,7 +737,11 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 				}
 			}
 		}
-
+#ifdef CONFIG_MACH_TENDERLOIN
+		if (configure_wm_hw(dev_info, codec, 0))
+			pr_err("%s: Could not deconfigure wolfson hw properly!\n",
+					__func__);
+#endif
 	}
 	return rc;
 }
@@ -1544,38 +1567,66 @@ static int jack_notifier_event(struct notifier_block *nb, unsigned long event, v
 
 		if(1 == event){
 			// Someone inserted a jack, we need to turn on mic bias2 for headset mic detection
-			snd_soc_dapm_force_enable_pin( &codec->dapm, "MICBIAS2");
-
-			pr_crit("MIC DETECT: ENABLE. Jack inserted\n");
-			// This will enable mic detection on 8958
-			wm8958_mic_detect( codec, &hp_jack, NULL, NULL);
+			if (!wm8994->suspended) {
+				snd_soc_dapm_force_enable_pin( &codec->dapm, "MICBIAS2");
+				snd_soc_dapm_sync(&codec->dapm);
+				printk(KERN_INFO "%s: MIC DETECT: ENABLE. Jack inserted\n",
+						__func__);
+				// This will enable mic detection on 8958
+				wm8958_mic_detect( codec, &hp_jack, NULL, NULL);
+			} else {
+				printk(KERN_INFO "%s: MIC DETECT: DEFER. Jack inserted\n",
+						__func__);
+				wm8994->defer_mic_det = true;
+				// set switch state for headphones plugged
+				// in case mic_detect on resume does not catch
+				headphone_plugged = 2;
+				if (headphone_switch) {
+					switch_set_state(headphone_switch, headphone_plugged);
+				}
+				return 0;
+			}
 
 		}else if (0 == event){
 			headphone_plugged = 0;
 			if (headphone_switch) {
 				switch_set_state(headphone_switch, headphone_plugged);
 			}
-			pr_crit("MIC DETECT: DISABLE. Jack removed\n");
+			if (wm8994->defer_mic_det) {
+				printk(KERN_INFO "%s: MIC DETECT: NODEFER. Jack removed\n",
+						__func__);
+				wm8994->defer_mic_det = false;
+			} else {
+				printk(KERN_INFO "%s MIC DETECT: DISABLE. Jack removed\n",
+						__func__);
+			}
 
 			// This will disable mic detection on 8958
 			wm8958_mic_detect( codec, NULL, NULL, NULL);
 
 			if( wm8994->pdata->jack_is_mic) {
-				dev_err(codec->dev, "  Reporting headset removed\n");
+				printk(KERN_INFO "%s: Reporting Headset removed\n",
+						__func__);
 				wm8994->pdata->jack_is_mic = false;
 				wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
 				input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
 							    SW_MICROPHONE_INSERT,
 						        0);
 			} else {
-				dev_err(codec->dev, "  Reporting headphone removed\n");
+				printk(KERN_INFO "%s: Reporting Headphones removed\n",
+						__func__);
 				input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
 								    SW_HEADPHONE_INSERT,
 							        0);
 			}
 
 			input_sync(jack->jack->input_dev);
-			snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
+#if 0
+			if (1 || !wm8994->suspended) {
+				snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
+				snd_soc_dapm_sync(&codec->dapm);
+			}
+#endif
 		}
 	}
 
@@ -1720,6 +1771,39 @@ static int tendorloin_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int wm8994_resume_post(struct snd_soc_card *card)
+{
+	struct wm8994_priv *wm8994;
+	struct snd_soc_codec *codec;
+	struct snd_soc_pcm_runtime *rtd;
+
+	if (!card) {
+		printk(KERN_ERR "%s: card is NULL\n", __func__);
+	}
+
+	rtd = card->rtd;
+	if (!rtd) {
+		printk(KERN_ERR "%s: rtd is NULL\n", __func__);
+	}
+
+	codec = rtd->codec;
+	if (!codec) {
+		printk(KERN_ERR "%s: codec is NULL\n", __func__);
+	}
+
+	wm8994 = snd_soc_codec_get_drvdata (codec);
+	if (!wm8994) {
+		printk(KERN_ERR "%s: wm8994 is NULL\n", __func__);
+	}
+
+	if (wm8994->defer_mic_det) {
+		snd_soc_dapm_force_enable_pin( &codec->dapm, "MICBIAS2");
+		snd_soc_dapm_sync(&codec->dapm);
+		printk(KERN_INFO "%s: MIC DETECT: ENABLE.\n", __func__);
+		wm8958_mic_detect( codec, wm8994->soc_jack, NULL, NULL);
+		wm8994->defer_mic_det = false;
+	}
+}
 
 
 static struct snd_soc_ops tenderloin_ops = {
@@ -1754,6 +1838,7 @@ struct snd_soc_card snd_soc_card_msm = {
 	.name = "msm-audio",
 	.dai_link = msm_dai,
 	.num_links = ARRAY_SIZE(msm_dai),
+	.resume_post = wm8994_resume_post,
 };
 
 #else

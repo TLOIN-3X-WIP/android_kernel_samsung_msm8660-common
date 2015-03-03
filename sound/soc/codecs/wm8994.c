@@ -1014,14 +1014,29 @@ static int post_ev(struct snd_soc_dapm_widget *w,
 
 	// TODO -JCS CHECK:
 	// Handle late enables for sequences like MICBIAS ...
-	if (wm8994->aif1clk_enable)
+	if (wm8994->aif1clk_enable) {
 		snd_soc_update_bits(codec, WM8994_AIF1_CLOCKING_1,
 				    WM8994_AIF1CLK_ENA_MASK,
 				    WM8994_AIF1CLK_ENA);
-	if (wm8994->aif2clk_enable)
+		wm8994->aif1clk_enable = 0;
+	}
+	if (wm8994->aif2clk_enable) {
 		snd_soc_update_bits(codec, WM8994_AIF2_CLOCKING_1,
 				    WM8994_AIF2CLK_ENA_MASK,
 				    WM8994_AIF2CLK_ENA);
+		wm8994->aif2clk_enable = 0;
+	}
+	// do some disabled too? - TODO -JCS
+	if (wm8994->aif1clk_disable) {
+		snd_soc_update_bits(codec, WM8994_AIF1_CLOCKING_1,
+				    WM8994_AIF1CLK_ENA_MASK, 0);
+		wm8994->aif1clk_disable = 0;
+	}
+	if (wm8994->aif2clk_disable) {
+		snd_soc_update_bits(codec, WM8994_AIF2_CLOCKING_1,
+				    WM8994_AIF2CLK_ENA_MASK, 0);
+		wm8994->aif2clk_disable = 0;
+	}
 
 	return 0;
 }
@@ -2532,7 +2547,8 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 	struct wm8994 *control = codec->control_data;
 	int i, ret;
 
-#if 0
+	wm8994->suspended = true;
+
 	switch (control->type) {
 	case WM8994:
 		snd_soc_update_bits(codec, WM8994_MICBIAS, WM8994_MICD_ENA, 0);
@@ -2542,7 +2558,6 @@ static int wm8994_suspend(struct snd_soc_codec *codec, pm_message_t state)
 				    WM8958_MICD_ENA, 0);
 		break;
 	}
-#endif
 
 	// -JCS TODO - CHECK
 	for (i = 0; i < ARRAY_SIZE(wm8994->fll); i++) {
@@ -2603,20 +2618,24 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 				 i + 1, ret);
 	}
 
-#if 0
-	switch (control->type) {
-	case WM8994:
-		if (wm8994->micdet[0].jack || wm8994->micdet[1].jack)
-			snd_soc_update_bits(codec, WM8994_MICBIAS,
-					    WM8994_MICD_ENA, WM8994_MICD_ENA);
-		break;
-	case WM8958:
-		if (wm8994->jack_cb)
-			snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
-					    WM8958_MICD_ENA, WM8958_MICD_ENA);
-		break;
+	if(!wm8994->defer_mic_det) {
+		switch (control->type) {
+		case WM8994:
+			if (wm8994->micdet[0].jack || wm8994->micdet[1].jack)
+				snd_soc_update_bits(codec, WM8994_MICBIAS,
+							WM8994_MICD_ENA, WM8994_MICD_ENA);
+			break;
+		case WM8958:
+			if (wm8994->jack_cb) {
+				snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
+							2 | WM8958_MICD_ENA, WM8958_MICD_ENA);
+
+			}
+			break;
+		}
 	}
-#endif
+
+	wm8994->suspended = false;
 
 	pm_runtime_put(codec->dev);
 
@@ -2908,7 +2927,7 @@ static void wm8958_hp_micdet(u16 status, void *data)
 	oldtype = wm8994->micdet[0].jack->jack->type;
 	if(0x203 == status && !(wm8994->pdata->jack_is_mic) ){
 		headphone_plugged = 1;
-		dev_err(codec->dev, "  Reporting Headset inserted\n");
+		printk(KERN_INFO "%s: Reporting Headset inserted\n", __func__);
 
 		wm8994->pdata->jack_is_mic = true;
 		wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
@@ -2917,31 +2936,31 @@ static void wm8958_hp_micdet(u16 status, void *data)
 					        1);		
 	}else if(7 == status && wm8994->pdata->jack_is_mic == false) { 
 		headphone_plugged = 2;
-		dev_err(codec->dev, "  Reporting headphones inserted\n");
+		printk(KERN_INFO "%s: Reporting Headphones inserted\n", __func__);
 		input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
 							    SW_HEADPHONE_INSERT,
 						        1);
 
 		/* Disable detection, headphones can't change state */
 		wm8958_mic_detect(codec, NULL, NULL, NULL);
-		snd_soc_dapm_disable_pin(&(codec->dapm), "MICBIAS2");
+		// snd_soc_dapm_disable_pin(&(codec->dapm), "MICBIAS2");
 
 	} else {
 
 		if(0x7 == status && wm8994->pdata->jack_is_mic){
-			dev_err(codec->dev, "  Reporting button press down\n");
+			printk(KERN_INFO "%s: Reporting button press down\n", __func__);
 			wm8994->micdet[0].jack->jack->type = SND_JACK_BTN_0;
 			input_report_key(wm8994->micdet[0].jack->jack->input_dev, KEY_PLAYPAUSE,
 					 1);
 
 		}else if(0x203 == status && wm8994->pdata->jack_is_mic){
-			dev_err(codec->dev, "  Reporting button press up\n");
+			printk(KERN_INFO "%s: Reporting button press up\n", __func__);
 			wm8994->micdet[0].jack->jack->type = SND_JACK_BTN_0;
 			input_report_key(wm8994->micdet[0].jack->jack->input_dev, KEY_PLAYPAUSE,
 					 0);
 		}else if(0x402 == status){
 			headphone_plugged = 0;
-			dev_err(codec->dev, "  Reporting headset removed\n");
+			printk(KERN_INFO "%s: Reporting Headset removed\n", __func__);
 			wm8994->pdata->jack_is_mic = false;
 			wm8994->micdet[0].jack->jack->type = SND_JACK_MICROPHONE;
 			input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
@@ -3005,21 +3024,22 @@ int wm8958_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack,
 		msleep(250);
 
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
-				    2 | WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
+				    2 | WM8958_MICD_ENA, WM8958_MICD_ENA);
 
 	} else {
+		wm8994->jack_cb = NULL;
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 				    WM8958_MICD_ENA, 0);
+		snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
+		// snd_soc_dapm_sync(&codec->dapm);
 	}
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(wm8958_mic_detect);
 
-static irqreturn_t wm8958_mic_irq(int irq, void *data)
+int wm8958_mic_status(struct snd_soc_codec *codec)
 {
-	struct wm8994_priv *wm8994 = data;
-	struct snd_soc_codec *codec = wm8994->codec;
 	int reg = 0;
 	int i = 0;
 
@@ -3035,12 +3055,25 @@ static irqreturn_t wm8958_mic_irq(int irq, void *data)
 			break;
 	}
 
+	return reg;
+}
+EXPORT_SYMBOL_GPL(wm8958_mic_status);
+
+
+static irqreturn_t wm8958_mic_irq(int irq, void *data)
+{
+	struct wm8994_priv *wm8994 = data;
+	struct snd_soc_codec *codec = wm8994->codec;
+	int reg = 0;
+
+	reg = wm8958_mic_status(codec);
+
 	if (reg < 0) {
 		dev_err(codec->dev, "Failed to read mic detect status: %d\n",reg);
 		return IRQ_NONE;
 	}
 
-	dev_info(codec->dev, "MIC DETEC 3 reg = 0x%x\n", reg);
+	printk(KERN_INFO "%s: MIC DETECT: status = 0x%x\n", __func__, reg);
 
 #ifndef CONFIG_SND_SOC_WM8994_MODULE
 	trace_snd_soc_jack_irq(dev_name(codec->dev));
@@ -3078,6 +3111,7 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	wm8994->pdata = dev_get_platdata(codec->dev->parent);
 	wm8994->codec = codec;
 	wm8994->suspended = false; // -JCS TODO
+	wm8994->defer_mic_det = false;
 
 	if (wm8994->pdata && wm8994->pdata->micdet_irq)
 		wm8994->micdet_irq = wm8994->pdata->micdet_irq;
