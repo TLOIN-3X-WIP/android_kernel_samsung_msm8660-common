@@ -1815,7 +1815,7 @@ static int wm8994_suspend_pre(struct snd_soc_card *card)
 	struct snd_soc_codec *codec;
 	struct snd_soc_pcm_runtime *rt;
 	int rc;
-	int mic_timeout;
+	unsigned int mic_timeout;
 	int reclocked = 0;
 
 	rt = card->rtd;
@@ -1863,7 +1863,6 @@ static int wm8994_suspend_pre(struct snd_soc_card *card)
 	}
 	if (wm8994->jack_cb) {
 		mic_timeout = wm8958_get_mic_det_timeout();
-		if (mic_timeout < 0) mic_timeout = 0;
 		if (mic_timeout) {
 			// TODO - schedule delayed work to turn off mic_det
 			printk(KERN_INFO "%s: scheduling mic detect suspend\n", __func__);
