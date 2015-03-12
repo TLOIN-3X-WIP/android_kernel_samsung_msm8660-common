@@ -1815,6 +1815,7 @@ static int wm8994_suspend_pre(struct snd_soc_card *card)
 	struct snd_soc_codec *codec;
 	struct snd_soc_pcm_runtime *rt;
 	int rc;
+	int mic_timeout;
 	int reclocked = 0;
 
 	rt = card->rtd;
@@ -1860,24 +1861,25 @@ static int wm8994_suspend_pre(struct snd_soc_card *card)
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
 				    2 | WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
 	}
-#if 0
 	if (wm8994->jack_cb) {
-		printk(KERN_INFO "%s: MIC DETECT. SUSPEND.\n", __func__);
-		// snd_soc_dapm_set_bias_level(&codec->dapm, SND_SOC_BIAS_STANDBY);
-		// wm8994_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
-		// snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
-		wm8958_mic_detect( codec, NULL, NULL, NULL);
-		wm8994->defer_mic_det2 = true;
+		mic_timeout = wm8958_get_mic_det_timeout();
+		if (mic_timeout < 0) mic_timeout = 0;
+		if (mic_timeout) {
+			// TODO - schedule delayed work to turn off mic_det
+			printk(KERN_INFO "%s: scheduling mic detect suspend\n", __func__);
+			wake_lock_timeout(&jack_wlock, 
+					msecs_to_jiffies((mic_timeout+2)*1000));
+			schedule_delayed_work(&wm8994->suspend_mic_det,
+				msecs_to_jiffies(mic_timeout*1000));
+		} else {
+			printk(KERN_INFO "%s: MIC DETECT. SUSPEND.\n", __func__);
+			// snd_soc_dapm_set_bias_level(&codec->dapm, SND_SOC_BIAS_STANDBY);
+			// wm8994_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+			// snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
+			wm8958_mic_detect( codec, NULL, NULL, NULL);
+			wm8994->defer_mic_det2 = true;
+		}
 	}
-#else
-	if (wm8994->jack_cb) {
-		// TODO - schedule delayed work to turn off mic_det
-		printk(KERN_INFO "%s: scheduling mic detect suspend\n", __func__);
-		wake_lock_timeout(&jack_wlock, msecs_to_jiffies(10*1000));
-		schedule_delayed_work(&wm8994->suspend_mic_det,
-			msecs_to_jiffies(8*1000));
-	}
-#endif
 }
 
 static int wm8994_resume_post(struct snd_soc_card *card)

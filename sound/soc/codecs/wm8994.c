@@ -62,6 +62,28 @@ static int wm8994_retune_mobile_base[] = {
 
 extern int headphone_plugged;
 extern struct switch_dev *headphone_switch;
+static int wm8958_mic_detect_timeout = 300;
+
+static int param_set_mic_detect_timeout(const char *val,
+		struct kernel_param *kp)
+{
+	param_set_int(val, kp);
+	return 0;
+}
+
+param_check_int(mic_detect_timeout, &(wm8958_mic_detect_timeout));
+module_param_call(mic_detect_timeout, param_set_mic_detect_timeout,
+	param_get_int, &wm8958_mic_detect_timeout,
+	S_IRUGO | S_IWUSR | S_IWGRP
+	);
+__MODULE_PARM_TYPE(mic_detect_timeout, int);
+
+
+int wm8958_get_mic_det_timeout()
+{
+	return wm8958_mic_detect_timeout;
+}
+EXPORT_SYMBOL_GPL(wm8958_get_mic_det_timeout);
 
 #if 0
 // TODO -JCS - LATER...
