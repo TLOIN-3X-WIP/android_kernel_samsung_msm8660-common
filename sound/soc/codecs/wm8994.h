@@ -11,6 +11,8 @@
 
 #include <sound/soc.h>
 #include <linux/firmware.h>
+#include <linux/wakelock.h>
+#include <linux/semaphore.h>
 
 #include "wm_hubs.h"
 
@@ -79,6 +81,8 @@ struct wm8994_priv {
 	int mclk[2];
 	int aifclk[2];
 	struct wm8994_fll_config fll[2], fll_suspend[2];
+	int bclk_rate_tx;
+	int bclk_rate_rx;
 
 	int dac_rates[2];
 	int lrclk_shared[2];
@@ -138,6 +142,9 @@ struct wm8994_priv {
 	unsigned int force_route:1;
 	unsigned int suspended:1;
 
+	int aif1clk_enabled;
+	int aif2clk_enabled;
+
 	int dsp_active;
 	const struct firmware *cur_fw;
 	const struct firmware *mbc;
@@ -147,6 +154,11 @@ struct wm8994_priv {
 	struct snd_soc_jack	*soc_jack;
 	// bool suspended;
 	bool defer_mic_det;
+	bool defer_mic_det2;
+	struct delayed_work suspend_mic_det;
+	int mic_det_state;
+	struct wake_lock *jack_wlock;
+	struct semaphore sem;
 };
 
 int wm8994_hw_params(struct snd_pcm_substream *substream,
