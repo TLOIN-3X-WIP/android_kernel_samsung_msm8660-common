@@ -331,7 +331,7 @@ static int wm8994_suspend(struct device *dev)
 		return ret;
 	}
 #else
-	if (pdata->wm8994_shutdown && !pdata->jack_is_mic)
+	if (pdata->wm8994_shutdown)
 		pdata->wm8994_shutdown();
 #endif
 
@@ -356,7 +356,7 @@ static int wm8994_resume(struct device *dev)
 		return ret;
 	}
 #else
-	if (pdata->wm8994_setup && !pdata->jack_is_mic)
+	if (pdata->wm8994_setup)
 		pdata->wm8994_setup();
 #endif
 

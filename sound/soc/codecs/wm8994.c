@@ -2796,6 +2796,7 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 	}
 #endif
 
+#if 0
 	if(!wm8994->defer_mic_det) {
 		switch (control->type) {
 		case WM8994:
@@ -2812,6 +2813,7 @@ static int wm8994_resume(struct snd_soc_codec *codec)
 			break;
 		}
 	}
+#endif
 
 	wm8994->suspended = false;
 
@@ -3101,6 +3103,7 @@ static void wm8958_hp_micdet(u16 status, void *data)
 	struct snd_soc_codec *codec = data;
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int oldtype = 0;
+	unsigned mic_det_timeout = wm8958_get_mic_det_timeout();
 
 	oldtype = wm8994->micdet[0].jack->jack->type;
 	if(0x203 == status && !(wm8994->pdata->jack_is_mic) ){
@@ -3113,6 +3116,10 @@ static void wm8958_hp_micdet(u16 status, void *data)
 		input_report_switch(wm8994->micdet[0].jack->jack->input_dev,
 							SW_MICROPHONE_INSERT,
 							1);
+		if (wm8994->jack_wlock && mic_det_timeout) {
+			wake_lock_timeout(wm8994->jack_wlock,
+					msecs_to_jiffies(1000 * mic_det_timeout));
+		}
 	}else if(7 == status && wm8994->pdata->jack_is_mic == false) { 
 		headphone_plugged = 2;
 		wm8994->mic_det_state = 1;
@@ -3123,8 +3130,6 @@ static void wm8958_hp_micdet(u16 status, void *data)
 
 		/* Disable detection, headphones can't change state */
 		wm8958_mic_detect(codec, NULL, NULL, NULL);
-		// snd_soc_dapm_disable_pin(&(codec->dapm), "MICBIAS2");
-
 	} else {
 
 		if(0x7 == status && wm8994->pdata->jack_is_mic){
@@ -3133,8 +3138,9 @@ static void wm8958_hp_micdet(u16 status, void *data)
 			wm8994->micdet[0].jack->jack->type = SND_JACK_BTN_0;
 			input_report_key(wm8994->micdet[0].jack->jack->input_dev,
 					KEY_PLAYPAUSE, 1);
-			if (!wake_lock_active(wm8994->jack_wlock)) {
-				wake_lock_timeout(wm8994->jack_wlock, msecs_to_jiffies(2000));
+			if (wm8994->jack_wlock && mic_det_timeout) {
+				wake_lock_timeout(wm8994->jack_wlock,
+						msecs_to_jiffies(1000 * mic_det_timeout));
 			}
 
 		}else if(0x203 == status && wm8994->pdata->jack_is_mic){
@@ -3144,9 +3150,9 @@ static void wm8958_hp_micdet(u16 status, void *data)
 				wm8994->micdet[0].jack->jack->type = SND_JACK_BTN_0;
 				input_report_key(wm8994->micdet[0].jack->jack->input_dev,
 						KEY_PLAYPAUSE, 0);
-				if (!wake_lock_active(wm8994->jack_wlock)) {
+				if (wm8994->jack_wlock && mic_det_timeout) {
 					wake_lock_timeout(wm8994->jack_wlock,
-						msecs_to_jiffies(2000));
+							msecs_to_jiffies(1000 * mic_det_timeout));
 				}
 			}
 		}else if(0x402 == status){
@@ -3168,19 +3174,6 @@ static void wm8958_hp_micdet(u16 status, void *data)
 	wm8994->micdet[0].jack->jack->type = oldtype;
 }
 
-
-static void wm8958_suspend_mic_det(struct work_struct *smd_work)
-{
-	struct delayed_work *temp_dwork =
-			container_of (smd_work, struct delayed_work, work);
-	struct wm8994_priv *wm8994 =
-			container_of(temp_dwork, struct wm8994_priv, suspend_mic_det);
-
-	printk(KERN_INFO "%s: MIC DETECT. SUSPEND.\n", __func__);
-	snd_soc_dapm_disable_pin( &(wm8994->codec->dapm), "MICBIAS2");
-	wm8958_mic_detect( wm8994->codec, NULL, NULL, NULL);
-	wm8994->defer_mic_det2 = true;
-}
 
 /**
  * wm8958_mic_detect - Enable microphone detection via the WM8958 IRQ
@@ -3236,10 +3229,13 @@ int wm8958_mic_detect(struct snd_soc_codec *codec, struct snd_soc_jack *jack,
 
 	} else {
 		wm8994->jack_cb = NULL;
+		if (wm8994->jack_wlock && wake_lock_active(wm8994->jack_wlock)) {
+			wake_unlock(wm8994->jack_wlock);
+		}
 		snd_soc_update_bits(codec, WM8958_MIC_DETECT_1,
-				    WM8958_MICD_ENA, 0);
+				    2 | WM8958_MICD_ENA, 0);
 		snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
-		// snd_soc_dapm_sync(&codec->dapm);
+		snd_soc_dapm_sync(&codec->dapm);
 	}
 
 	return 0;
@@ -3321,6 +3317,7 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	wm8994->codec = codec;
 	wm8994->suspended = false;
 	wm8994->defer_mic_det = false;
+	wm8994->defer_mic_det2 = false;
 	wm8994->mic_det_state = 0;
 	wm8994->bclk_rate_tx = 0;
 	wm8994->bclk_rate_rx = 0;
@@ -3330,7 +3327,6 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	wm8994->aif2clk_enable = 0;
 	wm8994->aif1clk_disable = 0;
 	wm8994->aif2clk_disable = 0;
-	INIT_DELAYED_WORK(&wm8994->suspend_mic_det, wm8958_suspend_mic_det);
 
 	if (wm8994->pdata && wm8994->pdata->micdet_irq)
 		wm8994->micdet_irq = wm8994->pdata->micdet_irq;

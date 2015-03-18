@@ -155,7 +155,6 @@ struct wm8994_priv {
 	// bool suspended;
 	bool defer_mic_det;
 	bool defer_mic_det2;
-	struct delayed_work suspend_mic_det;
 	int mic_det_state;
 	struct wake_lock *jack_wlock;
 	struct semaphore sem;

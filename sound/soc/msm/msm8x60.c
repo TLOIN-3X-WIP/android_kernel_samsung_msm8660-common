@@ -492,10 +492,6 @@ static int configure_wm_hw(struct msm_snddev_info *dev_info, struct snd_soc_code
 			}
 		}
 
-		if (delayed_work_pending(&wm8994->suspend_mic_det)) {
-			cancel_delayed_work_sync(&wm8994->suspend_mic_det);
-		}
-
 		if (do_reclock) {
 			fll_rate = bclk_rate * WM_FLL_MULT;
 			if (fll_rate < WM_FLL_MIN_RATE)
@@ -1584,6 +1580,7 @@ static int jack_notifier_event(struct notifier_block *nb, unsigned long event, v
 	struct snd_soc_codec *codec;
 	struct wm8994_priv *wm8994;
 	struct snd_soc_jack *jack;
+	unsigned mic_det_timeout = wm8958_get_mic_det_timeout();
 
 	// Force enable will keep the MICBISA on, even when we stop reording
 	jack = data;
@@ -1593,7 +1590,7 @@ static int jack_notifier_event(struct notifier_block *nb, unsigned long event, v
 		codec = jack->codec;
 		wm8994 = snd_soc_codec_get_drvdata(codec);
 
-		wake_lock_timeout(&jack_wlock, msecs_to_jiffies(2000));
+		wake_lock_timeout(&jack_wlock, msecs_to_jiffies(5000));
 
 		if(1 == event){
 			// Someone inserted a jack, we need to turn on mic bias2 for headset mic detection
@@ -1602,19 +1599,25 @@ static int jack_notifier_event(struct notifier_block *nb, unsigned long event, v
 				snd_soc_dapm_sync(&codec->dapm);
 				printk(KERN_INFO "%s: MIC DETECT: ENABLE. Jack inserted\n",
 						__func__);
+				if (mic_det_timeout) {
+					wake_lock_timeout(&jack_wlock,
+							msecs_to_jiffies(1000 * mic_det_timeout));
+				}
 				// This will enable mic detection on 8958
 				wm8958_mic_detect( codec, &hp_jack, NULL, NULL);
 			} else {
 				printk(KERN_INFO "%s: MIC DETECT: DEFER. Jack inserted\n",
 						__func__);
 				wm8994->defer_mic_det = true;
-				wm8994->defer_mic_det2 = false;
+				wm8994->defer_mic_det2 = true;
 				// set switch state for headphones plugged
 				// in case mic_detect on resume does not catch
+#if 0
 				headphone_plugged = 2;
 				if (headphone_switch) {
 					switch_set_state(headphone_switch, headphone_plugged);
 				}
+#endif
 				return 0;
 			}
 
@@ -1623,7 +1626,7 @@ static int jack_notifier_event(struct notifier_block *nb, unsigned long event, v
 			if (headphone_switch) {
 				switch_set_state(headphone_switch, headphone_plugged);
 			}
-			if (wm8994->defer_mic_det) {
+			if (wm8994->defer_mic_det || wm8994->defer_mic_det2) {
 				printk(KERN_INFO "%s: MIC DETECT: NODEFER. Jack removed\n",
 						__func__);
 				wm8994->defer_mic_det = false;
@@ -1862,22 +1865,13 @@ static int wm8994_suspend_pre(struct snd_soc_card *card)
 				    2 | WM8958_MICD_ENA, 2 | WM8958_MICD_ENA);
 	}
 	if (wm8994->jack_cb) {
-		mic_timeout = wm8958_get_mic_det_timeout();
-		if (mic_timeout) {
-			// TODO - schedule delayed work to turn off mic_det
-			printk(KERN_INFO "%s: scheduling mic detect suspend\n", __func__);
-			wake_lock_timeout(&jack_wlock, 
-					msecs_to_jiffies((mic_timeout+2)*1000));
-			schedule_delayed_work(&wm8994->suspend_mic_det,
-				msecs_to_jiffies(mic_timeout*1000));
-		} else {
-			printk(KERN_INFO "%s: MIC DETECT. SUSPEND.\n", __func__);
-			// snd_soc_dapm_set_bias_level(&codec->dapm, SND_SOC_BIAS_STANDBY);
-			// wm8994_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
-			// snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
-			wm8958_mic_detect( codec, NULL, NULL, NULL);
-			wm8994->defer_mic_det2 = true;
-		}
+		printk(KERN_INFO "%s: MIC DETECT. SUSPEND.\n", __func__);
+		// snd_soc_dapm_set_bias_level(&codec->dapm, SND_SOC_BIAS_STANDBY);
+		// wm8994_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+		// snd_soc_dapm_disable_pin( &codec->dapm, "MICBIAS2");
+		wm8958_mic_detect( codec, NULL, NULL, NULL);
+		wm8994->defer_mic_det = false;
+		wm8994->defer_mic_det2 = true;
 	}
 }
 
