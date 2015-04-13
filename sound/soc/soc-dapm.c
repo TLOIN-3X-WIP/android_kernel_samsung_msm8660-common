@@ -1316,8 +1316,6 @@ static void dapm_seq_run(struct snd_soc_dapm_context *dapm,
 	list_for_each_entry_safe(w, n, list, power_list) {
 		ret = 0;
 
-		// printk(KERN_INFO "%s: %d %s\n", __func__, power_up ? 1 : 0, w->name);
-
 		/* Do we need to apply any queued changes? */
 		if (sort[w->id] != cur_sort || w->reg != cur_reg ||
 		    w->dapm != cur_dapm || w->subseq != cur_subseq) {

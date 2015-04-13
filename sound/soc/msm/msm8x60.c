@@ -542,8 +542,6 @@ static int msm_device_put(struct snd_kcontrol *kcontrol,
 
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
-	wm8958_clocking_check(codec, __func__);
-
 	set = ucontrol->value.integer.value[0];
 	route_cfg.dev_id = ucontrol->id.numid - device_index;
 	dev_info = audio_dev_ctrl_find_dev(route_cfg.dev_id);

@@ -1169,23 +1169,18 @@ int snd_soc_suspend(struct device *dev)
 	struct snd_soc_codec *codec;
 	int i;
 
-	printk(KERN_INFO "%s\n", __func__);
-
 	// TODO -JCS BODGE/brute-force-ignore-suspend?
 
 	if (!card->instantiated) {
-		printk(KERN_ERR "%s: uninsantiated card found card->name = %s\n",
-			__func__, card->name);
+		dev_dbg(card->dev, "uninsantiated card found card->name = %s\n",
+			card->name);
 		return 0;
 	}
 	/* If the initialization of this soc device failed, there is no codec
 	 * associated with it. Just bail out in this case.
 	 */
-	if (list_empty(&card->codec_dev_list)) {
-		printk(KERN_ERR "%s: no codecs for card->name = %s\n",
-			__func__, card->name);
+	if (list_empty(&card->codec_dev_list))
 		return 0;
-	}
 
 	/* Due to the resume being scheduled into a workqueue we could
 	* suspend before that's finished - wait for it to complete.
@@ -1202,7 +1197,6 @@ int snd_soc_suspend(struct device *dev)
 	/* we're going to block userspace touching us until resume completes */
 	snd_power_change_state(card->snd_card, SNDRV_CTL_POWER_D3hot);
 
-	// printk(KERN_INFO "%s PWR1\n", __func__);
 	/* mute any active DACs */
 	for (i = 0; i < card->num_rtd; i++) {
 		struct snd_soc_dai *dai = card->rtd[i].codec_dai;
@@ -1220,7 +1214,6 @@ int snd_soc_suspend(struct device *dev)
 		}
 	}
 
-	// printk(KERN_INFO "%s DAI1\n", __func__);
 	/* suspend all pcms */
 	for (i = 0; i < card->num_rtd; i++) {
 		if (card->rtd[i].dai_link->ignore_suspend ||
@@ -1230,13 +1223,11 @@ int snd_soc_suspend(struct device *dev)
 		snd_pcm_suspend_all(card->rtd[i].pcm);
 	}
 
-	// printk(KERN_INFO "%s PCM1\n", __func__);
 #if 0
 	if (card->suspend_pre)
 		card->suspend_pre(card);
 #endif
 
-	// printk(KERN_INFO "%s PRE1\n", __func__);
 	for (i = 0; i < card->num_rtd; i++) {
 		struct snd_soc_dai *cpu_dai = card->rtd[i].cpu_dai;
 		struct snd_soc_platform *platform = card->rtd[i].platform;
@@ -1258,7 +1249,6 @@ int snd_soc_suspend(struct device *dev)
 		}
 	}
 
-	// printk(KERN_INFO "%s PRE2\n", __func__);
 	/* close any waiting streams and save state */
 	for (i = 0; i < card->num_rtd; i++) {
 		flush_delayed_work_sync(&card->rtd[i].delayed_work);
@@ -1281,7 +1271,6 @@ int snd_soc_suspend(struct device *dev)
 				SND_SOC_DAPM_STREAM_SUSPEND);
 	}
 
-	// printk(KERN_INFO "%s PRE3\n", __func__);
 	/* suspend all CODECs */
 	list_for_each_entry(codec, &card->codec_dev_list, card_list) {
 		/* If there are paths active then the CODEC will be held with
@@ -1295,21 +1284,12 @@ int snd_soc_suspend(struct device *dev)
 				codec->cache_sync = 1;
 				break;
 			default:
-				printk(KERN_ERR "%s: CODEC is on over suspend\n", __func__);
+				dev_dbg(codec->dev, "CODEC is on over suspend\n");
 				break;
-			}
-		} else {
-			if (codec->driver->suspend) {
-				printk(KERN_ERR "%s: codec driver already suspended\n",
-						__func__);
-			} else {
-				printk(KERN_ERR "%s: codec driver has no suspend\n",
-						__func__);
 			}
 		}
 	}
 
-	// printk(KERN_INFO "%s PRE4\n", __func__);
 	for (i = 0; i < card->num_rtd; i++) {
 		struct snd_soc_dai *cpu_dai = card->rtd[i].cpu_dai;
 
@@ -1324,11 +1304,9 @@ int snd_soc_suspend(struct device *dev)
 				cpu_dai->driver->suspend(cpu_dai);
 	}
 
-	// printk(KERN_INFO "%s PRE5\n", __func__);
 	if (card->suspend_post)
 		card->suspend_post(card);
 
-	// printk(KERN_INFO "%s END\n", __func__);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_soc_suspend);
@@ -1460,10 +1438,8 @@ int snd_soc_resume(struct device *dev)
 
 	// TODO -JCS BODGE/didn't-suspend?
 
-	printk(KERN_INFO "%s\n", __func__);
-
 	if (!card->instantiated) {
-		dev_err(card->dev, "uninsantiated card found card->name = %s\n",
+		dev_dbg(card->dev, "uninsantiated card found card->name = %s\n",
 			card->name);
 		return 0;
 	}
@@ -1478,12 +1454,9 @@ int snd_soc_resume(struct device *dev)
 	}
 	if (ac97_control) {
 		dev_dbg(dev, "Resuming AC97 immediately\n");
-		printk(KERN_ERR "%s: Resuming AC97 immediately\n", __func__);
 		soc_resume_deferred(&card->deferred_resume_work);
-		printk(KERN_ERR "%s: Resumed AC97\n", __func__);
 	} else {
 		dev_dbg(dev, "Scheduling resume work\n");
-		printk(KERN_ERR "%s: Scheduling resume work\n", __func__);
 		if (!schedule_work(&card->deferred_resume_work))
 			dev_err(dev, "resume work item may be lost\n");
 	}
