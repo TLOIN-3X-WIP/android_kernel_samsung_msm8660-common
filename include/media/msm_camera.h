@@ -491,6 +491,7 @@ struct msm_snapshot_pp_status {
 #define SENSOR_SNAPSHOT_MODE		1
 #define SENSOR_RAW_SNAPSHOT_MODE	2
 #define SENSOR_VIDEO_120FPS_MODE	3
+#define SENSOR_SNAPSHOT_PREPARE_MODE 4
 
 #define SENSOR_QTR_SIZE			0
 #define SENSOR_FULL_SIZE		1

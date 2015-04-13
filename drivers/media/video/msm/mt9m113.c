@@ -637,6 +637,37 @@ static int32_t mt9m113_set_sensor_mode(int mode)
 
 		break;
 
+	case SENSOR_SNAPSHOT_PREPARE_MODE:
+		/* Switch to lower fps for Snapshot */
+
+		rc = mt9m113_i2c_read(mt9m113_client->addr, 0x3012, &coarse_integration_time_A, WORD_LEN);
+		if (rc < 0) return rc;
+		rc = mt9m113_i2c_read(mt9m113_client->addr, 0x3014, &fine_integration_time_A, WORD_LEN);
+		if (rc < 0) return rc;
+
+		rc = mt9m113_i2c_read(mt9m113_client->addr, 0x3014, &fine_integration_time_B, WORD_LEN);
+		if (rc < 0) return rc;
+
+
+		coarse_integration_time_B = ((coarse_integration_time_A * 1228)
+				+ fine_integration_time_A - fine_integration_time_B) / 1826;
+
+		CDBG(KERN_ERR "+++++ MT0M113 SENSOR_SNAPSHOT_PREPARE_MODE coarse A= %d, coarse B= %d\n"
+				,coarse_integration_time_A, coarse_integration_time_B );
+		CDBG(KERN_ERR "+++++ MT0M113 SENSOR_SNAPSHOT__PREPARE_MODE fine_ A= %d, fine B= %d\n"
+				,fine_integration_time_A, fine_integration_time_B );
+
+		rc = mt9m113_i2c_write(mt9m113_client->addr, 0x3012, coarse_integration_time_B, WORD_LEN);
+		if (rc < 0) return rc;
+
+		rc = mt9m113_i2c_write_table(&mod_snapshot_mode_reg_tbl[0], ARRAY_SIZE(mod_snapshot_mode_reg_tbl));
+		if (rc < 0) return rc;
+
+		//Use polling instead of static delay to make sure sensor ready before leave configuration.
+		//mdelay(20);
+
+		break;
+
 	default:
 		return -EINVAL;
 	}

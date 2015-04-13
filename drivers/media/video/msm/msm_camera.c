@@ -2418,6 +2418,34 @@ static long msm_ioctl_frame(struct file *filep, unsigned int cmd,
 	return rc;
 }
 
+static long msm_ioctl_ocontrol(struct file *filep, unsigned int cmd,
+	unsigned long arg)
+{
+	int rc = -EINVAL;
+	void __user *argp = (void __user *)arg;
+	struct msm_control_device *octrl_pmsm = filep->private_data;
+	struct msm_cam_device *pmsm = octrl_pmsm->pmsm;
+
+#if 0
+	mutex_lock(&pmsm->sync->lock);
+	if (!pmsm->sync->core_powered_on) {
+		mutex_unlock(&pmsm->sync->lock);
+		pr_err("%s, core not powered\n", __func__);
+		return -ENODEV;
+	}
+	mutex_unlock(&pmsm->sync->lock);
+#endif
+
+	switch (cmd) {
+	case MSM_CAM_IOCTL_SENSOR_IO_CFG:
+		rc = pmsm->sync->sctrl.s_config(argp);
+		break;
+	default:
+		return -EINVAL;
+		break;
+	}
+	return rc;
+}
 
 static long msm_ioctl_control(struct file *filep, unsigned int cmd,
 	unsigned long arg)
@@ -2538,6 +2566,23 @@ static int msm_release_config(struct inode *node, struct file *filep)
 		msm_queue_drain(&pmsm->sync->event_q, list_config);
 		atomic_set(&pmsm->opened, 0);
 	}
+	pr_info("%s, completed\n", __func__);
+	return rc;
+}
+
+static int msm_release_ocontrol(struct inode *node, struct file *filep)
+{
+	int rc;
+	struct msm_control_device *ctrl_pmsm = filep->private_data;
+	struct msm_cam_device *pmsm = ctrl_pmsm->pmsm;
+	pr_info("%s: %s\n", __func__, filep->f_path.dentry->d_name.name);
+	rc = __msm_release(pmsm->sync);
+#if 0
+	if (!rc) {
+		msm_queue_drain(&ctrl_pmsm->ctrl_q, list_control);
+		kfree(ctrl_pmsm);
+	}
+#endif
 	pr_info("%s, completed\n", __func__);
 	return rc;
 }
@@ -3057,6 +3102,7 @@ static int __msm_open(struct msm_cam_device *pmsm, const char *const apps_id,
 		sync->core_powered_on = 1;
 	}
 	sync->opencnt++;
+	
 
 msm_open_done:
 	mutex_unlock(&sync->lock);
@@ -3109,6 +3155,27 @@ static int msm_open_frame(struct inode *inode, struct file *filep)
 static int msm_open(struct inode *inode, struct file *filep)
 {
 	return msm_open_common(inode, filep, 1, 0);
+}
+
+static int msm_open_ocontrol(struct inode *inode, struct file *filep)
+{
+	int rc;
+
+	struct msm_control_device *octrl_pmsm =
+		kmalloc(sizeof(struct msm_control_device), GFP_KERNEL);
+	if (!octrl_pmsm)
+		return -ENOMEM;
+
+	rc = msm_open_common(inode, filep, 0, 1);
+	if (rc < 0) {
+		kfree(octrl_pmsm);
+		return rc;
+	}
+	octrl_pmsm->pmsm = filep->private_data;
+	filep->private_data = octrl_pmsm;
+
+	CDBG("%s: rc %d\n", __func__, rc);
+	return rc;
 }
 
 static int msm_open_control(struct inode *inode, struct file *filep)
@@ -3195,6 +3262,13 @@ static const struct file_operations msm_fops_control = {
 	.open = msm_open_control,
 	.unlocked_ioctl = msm_ioctl_control,
 	.release = msm_release_control,
+};
+
+static const struct file_operations msm_fops_ocontrol = {
+	.owner = THIS_MODULE,
+	.open = msm_open_ocontrol,
+	.unlocked_ioctl = msm_ioctl_ocontrol,
+	.release = msm_release_ocontrol,
 };
 
 static const struct file_operations msm_fops_frame = {
@@ -3330,11 +3404,14 @@ static int msm_sync_destroy(struct msm_sync *sync)
 	return 0;
 }
 
+#define MSM_CAMDEVS 4
+
 static int msm_device_init(struct msm_cam_device *pmsm,
 		struct msm_sync *sync,
 		int node)
 {
-	int dev_num = 3 * node;
+	int i;
+	int dev_num = MSM_CAMDEVS * node;
 	int rc = msm_setup_cdev(pmsm, node,
 		MKDEV(MAJOR(msm_devno), dev_num),
 		"control", &msm_fops_control);
@@ -3365,13 +3442,26 @@ static int msm_device_init(struct msm_cam_device *pmsm,
 		return rc;
 	}
 
-	atomic_set(&pmsm[0].opened, 0);
-	atomic_set(&pmsm[1].opened, 0);
-	atomic_set(&pmsm[2].opened, 0);
+#if MSM_CAMDEVS > 3
+	rc = msm_setup_cdev(pmsm + 3, node,
+		MKDEV(MAJOR(msm_devno), dev_num + 3),
+		"ocontrol", &msm_fops_ocontrol);
+	if (rc < 0) {
+		pr_err("%s: error creating ocontrol node: %d\n", __func__, rc);
+		msm_tear_down_cdev(pmsm,
+			MKDEV(MAJOR(msm_devno), dev_num));
+		msm_tear_down_cdev(pmsm + 1,
+			MKDEV(MAJOR(msm_devno), dev_num + 1));
+		msm_tear_down_cdev(pmsm + 2,
+			MKDEV(MAJOR(msm_devno), dev_num + 1));
+		return rc;
+	}
+#endif
 
-	pmsm[0].sync = sync;
-	pmsm[1].sync = sync;
-	pmsm[2].sync = sync;
+	for (i = 0; i < MSM_CAMDEVS; i++) {
+		atomic_set(&pmsm[i].opened, 0);
+		pmsm[i].sync = sync;
+	}
 
 	return rc;
 }
@@ -3392,7 +3482,7 @@ int msm_camera_drv_start(struct platform_device *dev,
 	if (!msm_class) {
 		/* There are three device nodes per sensor */
 		rc = alloc_chrdev_region(&msm_devno, 0,
-				3 * MSM_MAX_CAMERA_SENSORS,
+				MSM_CAMDEVS * MSM_MAX_CAMERA_SENSORS,
 				"msm_camera");
 		if (rc < 0) {
 			pr_err("%s: failed to allocate chrdev: %d\n", __func__,
@@ -3409,11 +3499,11 @@ int msm_camera_drv_start(struct platform_device *dev,
 		}
 	}
 
-	pmsm = kzalloc(sizeof(struct msm_cam_device) * 3 +
+	pmsm = kzalloc(sizeof(struct msm_cam_device) * MSM_CAMDEVS +
 			sizeof(struct msm_sync), GFP_ATOMIC);
 	if (!pmsm)
 		return -ENOMEM;
-	sync = (struct msm_sync *)(pmsm + 3);
+	sync = (struct msm_sync *)(pmsm + MSM_CAMDEVS);
 
 	rc = msm_sync_init(sync, dev, sensor_probe);
 	if (rc < 0) {
