@@ -5044,7 +5044,7 @@ unsigned char hdmi_is_primary;
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
 
 #define MSM_PMEM_KERNEL_EBI1_SIZE  0x600000
-#define MSM_PMEM_ADSP_SIZE         0x600000 /* 6 Mbytes */
+#define MSM_PMEM_ADSP_SIZE         0x800000 /* 6 Mbytes */ // 8 -JCS
 #define MSM_PMEM_AUDIO_SIZE        0x28B000
 
 #define MSM_SMI_BASE          0x38000000
