@@ -1998,8 +1998,11 @@ u32 vid_enc_free_recon_buffers(struct video_client_ctx *client_ctx,
 	}
 	len = sizeof(client_ctx->recon_buffer)/
 		sizeof(struct vcd_property_enc_recon_buffer);
-	pr_err(" %s() address  %p", __func__,
-	venc_recon->pbuffer);
+	if (!venc_recon->pbuffer) {
+		pr_err(" %s() address null", __func__);
+		return false;
+	}
+	pr_devel(" %s() address  %p", __func__, venc_recon->pbuffer);
 	for (i = 0; i < len; i++) {
 		if (client_ctx->recon_buffer[i].user_virtual_addr
 			== venc_recon->pbuffer) {
