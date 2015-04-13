@@ -141,7 +141,7 @@ static int msm_gemini_init(struct platform_device *pdev)
 		goto fail_4;
 	}
 
-	printk(KERN_INFO "%s %s: success\n", __func__, MSM_GEMINI_NAME);
+	GMN_DBG(KERN_INFO "%s %s: success\n", __func__, MSM_GEMINI_NAME);
 
 	return rc;
 

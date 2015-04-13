@@ -983,11 +983,11 @@ void msm_camio_set_perf_lvl(enum msm_bus_perf_setting perf_setting)
 			bus_perf_client = 0;
 			return;
 		}
-		pr_info("%s: S_INIT rc = %u\n", __func__, bus_perf_client);
+		pr_devel("%s: S_INIT rc = %u\n", __func__, bus_perf_client);
 		break;
 	case S_EXIT:
 		if (bus_perf_client) {
-			pr_info("%s: S_EXIT\n", __func__);
+			pr_devel("%s: S_EXIT\n", __func__);
 			msm_bus_scale_unregister_client(bus_perf_client);
 		} else
 			pr_err("%s: Bus Client NOT Registered!!!\n", __func__);
@@ -996,7 +996,7 @@ void msm_camio_set_perf_lvl(enum msm_bus_perf_setting perf_setting)
 		if (bus_perf_client) {
 			rc = msm_bus_scale_client_update_request(
 				bus_perf_client, 1);
-			pr_info("%s: S_PREVIEW rc = %d\n", __func__, rc);
+			pr_devel("%s: S_PREVIEW rc = %d\n", __func__, rc);
 		} else
 			pr_err("%s: Bus Client NOT Registered!!!\n", __func__);
 		break;
@@ -1004,7 +1004,7 @@ void msm_camio_set_perf_lvl(enum msm_bus_perf_setting perf_setting)
 		if (bus_perf_client) {
 			rc = msm_bus_scale_client_update_request(
 				bus_perf_client, 2);
-			pr_info("%s: S_VIDEO rc = %d\n", __func__, rc);
+			pr_devel("%s: S_VIDEO rc = %d\n", __func__, rc);
 		} else
 			pr_err("%s: Bus Client NOT Registered!!!\n", __func__);
 		break;
@@ -1012,13 +1012,13 @@ void msm_camio_set_perf_lvl(enum msm_bus_perf_setting perf_setting)
 		if (bus_perf_client) {
 			rc = msm_bus_scale_client_update_request(
 				bus_perf_client, 3);
-			pr_info("%s: S_CAPTURE rc = %d\n", __func__, rc);
+			pr_devel("%s: S_CAPTURE rc = %d\n", __func__, rc);
 		} else
 			pr_err("%s: Bus Client NOT Registered!!!\n", __func__);
 		break;
 	case S_DEFAULT:
 		break;
 	default:
-		pr_info("%s: INVALID CASE\n", __func__);
+		pr_err("%s: INVALID CASE\n", __func__);
 	}
 }
