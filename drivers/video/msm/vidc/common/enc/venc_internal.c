@@ -1697,9 +1697,9 @@ u32 vid_enc_free_buffer(struct video_client_ctx *client_ctx,
 	if (!vidc_delete_addr_table(client_ctx, dir_buffer,
 				(unsigned long)buffer_info->pbuffer,
 				&kernel_vaddr)) {
-		ERR("%s(): WNG: user_virt_addr = %p has not been set.",
+		ERR("%s(): WNG: user_virt_addr = %p has not been unset.",
 		    __func__, buffer_info->pbuffer);
-		return true;
+		return false;
 	}
 
 	return true;

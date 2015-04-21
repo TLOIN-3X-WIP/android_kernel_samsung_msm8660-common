@@ -864,6 +864,17 @@ bail_out_add:
 }
 EXPORT_SYMBOL(vidc_insert_addr_table_kernel);
 
+struct ion_handle {
+	struct kref ref;
+	struct ion_client *client;
+	struct ion_buffer *buffer;
+	struct rb_node node;
+	unsigned int kmap_cnt;
+	unsigned int dmap_cnt;
+	unsigned int usermap_cnt;
+	unsigned int iommu_map_cnt;
+};
+
 u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 	enum buffer_dir buffer,
 	unsigned long user_vaddr,
@@ -896,6 +907,11 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 		pr_err("%s() : client_ctx = %p."
 			" user_virt_addr = 0x%08lx NOT found",
 			__func__, client_ctx, user_vaddr);
+		goto bail_out_del;
+	}
+	if (buf_addr_table[i].buff_ion_handle &&
+		(struct ion_handle *)(buf_addr_table[i].buff_ion_handle)->kmap_cnt != 0) {
+		printk(KERN_ERR "%s: cannot deallocate, in-use\n", __func__);
 		goto bail_out_del;
 	}
 	if (buf_addr_table[i].client_data) {

@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  *
  */
+#define DDL_MSG_LOG 1
 
 #include "vcd_ddl.h"
 #include "vcd_ddl_shared_mem.h"

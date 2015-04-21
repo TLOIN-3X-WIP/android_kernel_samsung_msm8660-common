@@ -2158,7 +2158,7 @@ static int msm_pp_release(struct msm_sync *sync, void __user *arg)
 	unsigned long flags;
 
 	if (!sync->pp_mask) {
-		pr_warning("%s: pp not in progress for\n", __func__);
+		pr_devel("%s: pp not in progress for\n", __func__);
 		return -EINVAL;
 	}
 	if (sync->pp_mask & PP_PREV) {

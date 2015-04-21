@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DDL_MSG_LOG 1
 #include "vcd_ddl.h"
 #include "vcd_ddl_metadata.h"
 #include "vcd_res_tracker_api.h"
@@ -586,7 +586,8 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 		if (!DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN) ||
 			vcd_status != VCD_ERR_ILLEGAL_OP) {
 			DDL_MSG_ERROR("ddl_set_enc_property:"
-				"Fails_as_not_in_open_state");
+				"Fails_as_not_in_open_state prop_id=%d",
+				property_hdr->prop_id);
 		return VCD_ERR_ILLEGAL_OP;
 	}
 	} else

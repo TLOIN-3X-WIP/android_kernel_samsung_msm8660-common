@@ -300,6 +300,11 @@ static void ion_handle_destroy(struct kref *kref)
 	/* XXX Can a handle be destroyed while it's map count is non-zero?:
 	   if (handle->map_cnt) unmap
 	 */
+	if (handle->kmap_cnt || handle->dmap_cnt || handle->usermap_cnt) {
+		printk(KERN_ERR "%s: kmap_cnt=%d dmap_cnt=%d usermap_cnt=%d\n",
+				__func__, handle->kmap_cnt, handle->dmap_cnt,
+				handle->usermap_cnt);
+	}
 	WARN_ON(handle->kmap_cnt || handle->dmap_cnt || handle->usermap_cnt);
 	ion_buffer_put(handle->buffer);
 	if (!RB_EMPTY_NODE(&handle->node))

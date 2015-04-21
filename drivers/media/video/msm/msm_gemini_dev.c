@@ -96,6 +96,7 @@ static int msm_gemini_init(struct platform_device *pdev)
 	int rc = -1;
 	struct device *dev;
 
+	printk(KERN_ERR "%s\n", __func__);
 	GMN_DBG("%s:%d]\n", __func__, __LINE__);
 
 	msm_gemini_device_p = __msm_gemini_init(pdev);
@@ -173,6 +174,7 @@ static void msm_gemini_exit(void)
 
 static int __msm_gemini_probe(struct platform_device *pdev)
 {
+	printk(KERN_ERR "%s\n", __func__);
 	int rc;
 	rc = msm_gemini_init(pdev);
 	return rc;
