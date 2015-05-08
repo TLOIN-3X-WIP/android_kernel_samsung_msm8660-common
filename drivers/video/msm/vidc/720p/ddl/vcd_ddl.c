@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DDL_MSG_LOG 1
 #include <media/msm/vidc_type.h>
 #include "vcd_ddl_utils.h"
 #include "vcd_ddl_metadata.h"

@@ -37,7 +37,6 @@
 #define VID_ENC_NAME	"msm_vidc_enc"
 static char *node_name[2] = {"", "_sec"};
 
-#define DEBUG 1
 #if DEBUG
 #define DBG(x...) printk(KERN_DEBUG x)
 #else

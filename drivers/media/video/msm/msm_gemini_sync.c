@@ -810,7 +810,6 @@ struct msm_gemini_device *__msm_gemini_init(struct platform_device *pdev)
 {
 	struct msm_gemini_device *pgmn_dev;
 
-	printk(KERN_ERR "%s\n", __func__);
 	pgmn_dev = kzalloc(sizeof(struct msm_gemini_device), GFP_ATOMIC);
 	if (!pgmn_dev) {
 		GMN_PR_ERR("%s:%d]no mem\n", __func__, __LINE__);

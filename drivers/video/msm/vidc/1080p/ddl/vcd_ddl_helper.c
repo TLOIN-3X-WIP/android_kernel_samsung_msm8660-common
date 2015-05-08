@@ -10,8 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DDL_MSG_LOG 1
-
 #include <linux/ion.h>
 #include <mach/msm_memtypes.h>
 #include "vcd_ddl.h"
