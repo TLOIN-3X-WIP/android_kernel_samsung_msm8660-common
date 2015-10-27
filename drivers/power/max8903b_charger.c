@@ -103,15 +103,14 @@ static int max8903b_current_setup(enum max8903b_current value)
 	return rc;
 }
 
-#if 0
 static void max8903b_hw_init(void)
 {
+	if (!pdevice_resource) return;
+	gpio_set_value(pdevice_resource->CEN_N_in, pdevice_resource->CEN_N_in_polarity ? 0 : 1);  /* charger disable */
 	gpio_set_value(pdevice_resource->DCM_in, pdevice_resource->DCM_in_polarity ? 1 : 0); /* usb mode */
-	gpio_set_value(pdevice_resource->IUSB_in, pdevice_resource->IUSB_in_polarity ? 0 : 1); /* usb 500mA */
-	gpio_set_value(pdevice_resource->USUS_in, pdevice_resource->USUS_in_polarity ? 1 : 0);
-	gpio_set_value(pdevice_resource->CEN_N_in, pdevice_resource->CEN_N_in_polarity ? 1 : 0);  /* charger enable */
+	gpio_set_value(pdevice_resource->USUS_in, pdevice_resource->USUS_in_polarity ? 0 : 1); /* usb suspend */
+	pdevice_resource->suspend_gpio_config();
 }
-#endif
 
 /* /sys/power/charger/status */
 /*
@@ -316,7 +315,7 @@ static int __devinit max8903b_charger_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "failed to create sysfs 'charger' link\n");
 	}
 
-	//max8903b_hw_init();
+	max8903b_hw_init();
 
 	return 0;
 }

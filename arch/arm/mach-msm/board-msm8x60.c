@@ -3168,6 +3168,7 @@ void max8903b_set_connected_ps (unsigned connected)
 
 	if (!connected) {
 		max8903b_disable_charge();
+		max8903b_set_charge_ma(0);
 		max8903b_vbus_draw_ma_max = 0;
 	} else if (connected & MAX8903B_CONNECTED_PS_DOCK) {
 		max8903b_set_charge_ma(MAX8903B_DOCK_DRAW_MA);
