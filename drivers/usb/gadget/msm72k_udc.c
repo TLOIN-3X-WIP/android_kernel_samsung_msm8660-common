@@ -528,6 +528,9 @@ static int usb_multi_chg_detect(struct usb_info *ui)
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
 	enum chg_type temp = USB_CHG_TYPE__INVALID;
 	int maxpower = -EINVAL;
+	int i, dl_now, dl_prev, dl_count;
+	int dl_x[5];
+	int scan_tot, scan_mid;
 
 	ui->is_cdp = 0; // not CDP
 
@@ -537,20 +540,48 @@ static int usb_multi_chg_detect(struct usb_info *ui)
 	ulpi_write_with_reset(ui, 0x0f, 0x34);
 	//ulpi_write_with_reset(ui, 0x48, 0x04);
 
+	mb();
 	msleep(10);
 
 	ulpi_write_with_reset(ui,0x4d, 0x04);
 	ulpi_write_with_reset(ui,0x06, 0x0c);
+	mb();
 	msleep(20/*10*/);  // this delay must be here !!
 
-	if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 11)) { //D+ : high
-		if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : high, D- : high
+#define read_dl (((readl(USB_PORTSC) & PORTSC_LS) & ((1 << 11) | (1 <<10))) >> 10)
+
+	dl_prev = read_dl;
+	dl_count = 0;
+	scan_tot = 18;
+	scan_mid = 10;
+	for (i = 0; i < scan_tot; i++) {
+		msleep(100);
+		dl_now = read_dl;
+		if (dl_now != dl_prev) {
+			dl_count = 0;
+		} else {
+			dl_count++;
+		}
+		if (i >= scan_mid && dl_count >= 4) break;
+		dl_prev = dl_now;
+	}
+	if (i >= scan_tot) dl_now = 0;
+	printk("UDC-CHG X-DETECT(0): now=%d i=%d count=%d\n", dl_now, i, dl_count);
+
+	if (dl_now & 2) { //D+ : high
+		if (dl_now & 1) { //D+ : high, D- : high
 			ulpi_write_with_reset(ui, 0x45, 0x04);
 			ulpi_write_with_reset(ui, 0x2, 0x0b); //pull-down D+
-			msleep(10/*100*/);
+			for (i = 0; i < 5; i++) {
+				msleep(25);
+				dl_now = read_dl;
+				dl_x[i] = dl_now;
+			}
+			printk("UDC-CHG X-DETECT(2-1): %d,%d,%d,%d,%d\n",
+					dl_x[0], dl_x[1], dl_x[2], dl_x[3], dl_x[4]);
 			printk("UDC-CHG (2-1): %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, (readl(USB_PORTSC) & PORTSC_LS));
-			if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : high, D- : high
-				if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 11)) {
+			if (dl_now & 1) { //D+ : high, D- : high
+				if (dl_now & 2) {
 					printk("UDC-CHG (2-1-1-1-1): %s (%d) : iPad Charger(2000mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__WALLCHARGER;
 					maxpower = 2000;
@@ -560,10 +591,19 @@ static int usb_multi_chg_detect(struct usb_info *ui)
 					maxpower = 900;//500;
 				}
 			} else { //D+ : high, D- : low
-				printk("UDC-CHG (2-1-1-2): %s (%d) : 10W Adaptor(2000mA)!\n", __func__, __LINE__);
-				temp = USB_CHG_TYPE__WALLCHARGER;
-				maxpower = 2000; //usb_get_max_power(ui);
-
+				if (0 && dl_x[0] == 0) {
+					// YZXstudio USB3.0 Power Monitor causes
+					// "Android" 900mA ports to show as this, but
+					// stock 10W charger is detected as same,
+					// so keep this disabled until/if ...
+					printk("UDC-CHG (2-1-1-2-1): %s (%d) : Generic Adaptor(900mA)!\n", __func__, __LINE__);
+					temp = USB_CHG_TYPE__WALLCHARGER;
+					maxpower = 900;
+				} else {
+					printk("UDC-CHG (2-1-1-2-2): %s (%d) : 10W Adaptor(2000mA)!\n", __func__, __LINE__);
+					temp = USB_CHG_TYPE__WALLCHARGER;
+					maxpower = 2000; //usb_get_max_power(ui);
+				}
 			}
 		} else { //D+ : high, D- : low
 			printk("UDC-CHG (2-1-2): %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
@@ -572,21 +612,45 @@ static int usb_multi_chg_detect(struct usb_info *ui)
 
 		}
 	} else { //D+ : low,
-		if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : low, D- : high
+		if (dl_now & 1) { //D+ : low, D- : high
 			printk("UDC-CHG (2-2): %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
 			temp = USB_CHG_TYPE__WALLCHARGER;
 			maxpower = 100;
 
 		} else { //D+ : low, D- : low
-			ulpi_write_with_reset(ui, 0x25, 0x34); //Aplly current source on D+
-			msleep(10/*100*/);
-			printk("UDC-CHG (2-2): %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, (readl(USB_PORTSC) & PORTSC_LS));
+			ulpi_write_with_reset(ui, 0x25, 0x34); // Apply current source on D+
+			mb();
+			dl_x[0] = read_dl;
+			for (i = 1; i < 5; i++) {
+				msleep(5);
+				dl_now = read_dl;
+				dl_x[i] = dl_now;
+			}
+			printk("UDC-CHG X-DETECT(2-2): %d,%d,%d,%d,%d\n",
+					dl_x[0], dl_x[1], dl_x[2], dl_x[3], dl_x[4]);
 
-			if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 11)) { //D+ : high
-				if ((readl(USB_PORTSC) & PORTSC_LS) & (1 << 10)) { //D+ : high, D- : high
-					printk("UDC-CHG (2-2-1-1): %s (%d) : OMTP/Android Phone Adaptor(900mA)!\n", __func__, __LINE__);
-					temp = USB_CHG_TYPE__WALLCHARGER;
-					maxpower = 900;
+			printk("UDC-CHG (2-2): %s (%d) : D+/D- = 0x%x\n", __func__, __LINE__, (readl(USB_PORTSC) & PORTSC_LS));
+			if (dl_now & 2) { //D+ : high
+				if (dl_now & 1) { //D+ : high, D- : high
+					ulpi_write_with_reset(ui,0x0F, 0x34); // clean up current source on D+
+					ulpi_write_with_reset(ui, 0x45, 0x04);
+					ulpi_write_with_reset(ui, 0x2, 0x0b); //pull-down D+
+					msleep(30);
+					dl_prev = read_dl;
+					for (i = 0; i < 20; i++) {
+						msleep(50);
+						dl_now = read_dl;
+						if (dl_prev != dl_now) break;
+					}
+					if (dl_prev != dl_now) {
+						printk("UDC-CHG (2-2-1-1-1): %s (%d) : Alt 10W Adaptor(2000mA)!\n", __func__, __LINE__);
+						temp = USB_CHG_TYPE__WALLCHARGER;
+						maxpower = 2000;
+					} else {
+						printk("UDC-CHG (2-2-1-1-2): %s (%d) : OMTP/Android Phone Adaptor(900mA)!\n", __func__, __LINE__);
+						temp = USB_CHG_TYPE__WALLCHARGER;
+						maxpower = 900;
+					}
 				} else { //D+ : high, D- : low
 					printk("UDC-CHG (2-2-1-2): %s (%d) : Unknown type Adaptor(100mA)!\n", __func__, __LINE__);
 					temp = USB_CHG_TYPE__WALLCHARGER;
