@@ -4127,6 +4127,8 @@ void a6_irq_work_handler(struct work_struct *work)
 			/* Send uevent */
 			kobject_uevent_env(&state->i2c_dev->dev.kobj, KOBJ_CHANGE, &envp[12]);
 			battery_changed = true;
+			printk(KERN_ERR "BATTERY VOLTAGE LOW CRITICAL DETECTED - POWERING OFF");
+			kernel_power_off();
 		}
 
 		/* battery temp high critical? */
